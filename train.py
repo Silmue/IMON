@@ -88,7 +88,9 @@ def main():
         ret.update([(k + ':0', v) for k, v in kwargs.items()])
         return ret
 
-    with tf.Session(config=tf.ConfigProto()) as sess:
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    with tf.Session(config=config) as sess:
         saver = tf.train.Saver(tf.get_collection(
             tf.GraphKeys.GLOBAL_VARIABLES), max_to_keep=5, keep_checkpoint_every_n_hours=5)
         if args.checkpoint is None:
