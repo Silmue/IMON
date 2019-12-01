@@ -40,6 +40,8 @@ parser.add_argument('--clear_steps', action='store_true')
 parser.add_argument('--finetune', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
+parser.add_argument('--n_pred', type=int, default=4)
+parser.add_argument('--ipmethod', type=int, default=0)
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -68,6 +70,8 @@ def main():
     Framework.net_args['base_network'] = args.base_network
     Framework.net_args['n_cascades'] = args.n_cascades
     Framework.net_args['rep'] = args.rep
+    Framework.net_args['n_pred'] = args.n_pred
+    Framework.net_args['ipmethod'] = args.ipmethod
     Framework.net_args.update(eval('dict({})'.format(args.net_args)))
     with open(os.path.join(args.dataset), 'r') as f:
         cfg = json.load(f)
