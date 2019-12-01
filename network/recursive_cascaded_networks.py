@@ -37,18 +37,24 @@ class RecursiveCascadedNetworks(Network):
                  base_network, n_cascades, rep=1,
                  det_factor=0.1, ortho_factor=0.1, reg_factor=1.0,
                  extra_losses={}, warp_gradient=True,
-                 fast_reconstruction=False, warp_padding=False,
+                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=4
                  **kwargs):
         super().__init__(name)
         self.det_factor = det_factor
         self.ortho_factor = ortho_factor
         self.reg_factor = reg_factor
-
-        self.base_network = eval(base_network)
-        self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
-            [(self.base_network("deform_stem_" + str(i),
-                                flow_multiplier=1.0 / n_cascades), {'raw_weight': 0})] * rep
-            for i in range(n_cascades)], [])
+        if self.base_network=='IMON':
+            self.base_network = eval(base_network)
+            self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
+                [(self.base_network("deform_stem_" + str(i),
+                                    flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, n_pred=n_pred), {'raw_weight': 0})] * rep
+                for i in range(n_cascades)], [])
+        else:
+            self.base_network = eval(base_network)
+            self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
+                [(self.base_network("deform_stem_" + str(i),
+                                    flow_multiplier=1.0 / n_cascades), {'raw_weight': 0})] * rep
+                for i in range(n_cascades)], [])
         self.stems[-1][1]['raw_weight'] = 1
 
         for _, param in self.stems:

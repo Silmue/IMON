@@ -46,7 +46,7 @@ def upconvolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride, t
                                 targetShape, stddev, reuse),
                      alpha, opName+'_rectified')
 
-def upsample(input_, upsamplescale):
+def upsample(input_, upsamplescale, ipmethod):
     bs, xdim, ydim, zdim, channel_count = input_.shape.as_list()
     xdim *= upsamplescale
     ydim *= upsamplescale
@@ -54,21 +54,25 @@ def upsample(input_, upsamplescale):
     deconv = tf.nn.conv3d_transpose(value=input_, filter=tf.ones([upsamplescale,upsamplescale,upsamplescale,channel_count,channel_count], tf.float32), output_shape=[4, xdim, ydim, zdim, channel_count],
                                 strides=[1, upsamplescale, upsamplescale, upsamplescale, 1],
                                 padding="SAME", name='UpsampleDeconv')
-    # smooth5d = tf.constant(np.ones([upsamplescale,upsamplescale,upsamplescale,channel_count,channel_count],dtype='float32')/np.float32(upsamplescale)/np.float32(upsamplescale)/np.float32(upsamplescale), name='Upsample'+str(upsamplescale))
-    # print('Upsample', upsamplescale)
-    # return tf.nn.conv3d(input=deconv,
-    #              filter=smooth5d,
-    #              strides=[1, 1, 1, 1, 1],
-    #              padding='SAME',
-    #              name='UpsampleSmooth'+str(upsamplescale))
-    return deconv
+    if ipmethod==1:
+        smooth5d = tf.constant(np.ones([upsamplescale,upsamplescale,upsamplescale,channel_count,channel_count],dtype='float32')/np.float32(upsamplescale)/np.float32(upsamplescale)/np.float32(upsamplescale), name='Upsample'+str(upsamplescale))
+        # print('Upsample', upsamplescale)
+        return tf.nn.conv3d(input=deconv,
+                     filter=smooth5d,
+                     strides=[1, 1, 1, 1, 1],
+                     padding='SAME',
+                     name='UpsampleSmooth'+str(upsamplescale))
+    else:
+        return deconv
 
 
 class IMON(Network):
-    def __init__(self, name, flow_multiplier=1., channels=16, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=16, ipmethod=0, n_pred=4, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
+        self.ipmethod = ipmethod
+        self.n_pred = n_pred
 
     def build(self, img1, img2):
         '''
@@ -136,8 +140,8 @@ class IMON(Network):
         concat1 = tf.concat([conv1, deconv1, upsamp2to1], 4, 'concat1')
         pred0 = upconvolve('upsamp1to0', concat1, dims, 4, 2, shape0[1:4])
         pred = pred0
-        for i in range(2, 6):
-            pred += upsample(eval('pred{}'.format(i)), 2**i)
+        for i in range(2, self.n_pred+1):
+            pred += upsample(eval('pred{}'.format(i)), 2**i, self.ipmethod)
 
         return {'flow': pred * 20 * self.flow_multiplier}
 
