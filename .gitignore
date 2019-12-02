@@ -8,7 +8,7 @@
 /weights/
 /evaluate/
 *.h5
-
+*.out
 # User-specific files
 *.suo
 *.user
