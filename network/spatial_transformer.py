@@ -1,6 +1,6 @@
 from keras.layers.core import Layer
 import tensorflow as tf
-
+from .user_ops import user_ops 
 
 class Fast3DTransformer(Layer):
     def __init__(self, padding = False, **kwargs):
@@ -23,7 +23,7 @@ class Fast3DTransformer(Layer):
         if self.padding:
             im = tf.pad(im, [[0, 0], [1, 1], [1, 1], [1, 1], [0, 0]], "CONSTANT")
             flow = tf.pad(flow, [[0, 0], [1, 1], [1, 1], [1, 1], [0, 0]], "CONSTANT")
-        warped = tf.user_ops.reconstruction(im, flow)
+        warped = user_ops.reconstruction(im, flow)
         if self.padding:
             warped = warped[:, 1: -1, 1: -1, 1: -1, :]
         return warped
