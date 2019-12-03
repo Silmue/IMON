@@ -20,6 +20,10 @@ parser.add_argument('--paired', action='store_true')
 parser.add_argument('--data_args', type=str, default=None)
 parser.add_argument('--net_args', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
+parser.add_argument('--n_pred', type=int, default=4)
+parser.add_argument('--ipmethod', type=int, default=0)
+parser.add_argument('--save_image', type=bool, default=False)
+parser.add_argument('--image_dir', type=str, default='view/')
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -61,6 +65,8 @@ def main():
     Framework.net_args['base_network'] = model_args['base_network']
     Framework.net_args['n_cascades'] = model_args['n_cascades']
     Framework.net_args['rep'] = args.rep
+    Framework.net_args['n_pred'] = args.n_pred
+    Framework.net_args['ipmethod'] = args.ipmethod
     Framework.net_args.update(eval('dict({})'.format(model_args['net_args'])))
     if args.net_args is not None:
         Framework.net_args.update(eval('dict({})'.format(args.net_args)))
@@ -108,7 +114,7 @@ def main():
         with open(output_fname, 'w') as fo:
             print("Validation subset {}".format(val_subset))
             gen = ds.generator(val_subset, loop=False)
-            results = framework.validate(sess, gen, keys=keys, summary=False)
+            results = framework.validate(sess, gen, keys=keys, summary=False, predict=args.save_image)
             for i in range(len(results['jaccs'])):
                 print(results['id1'][i], results['id2'][i], np.mean(results['dices'][i]), np.mean(results['jaccs'][i]), np.mean(
                     results['landmark_dists'][i]), results['jacobian_det'][i], file=fo)
@@ -123,6 +129,9 @@ def main():
                 np.mean(landmarks, axis=-1))), file=fo)
             print("Jacobian determinant: {} ({})".format(np.mean(
                 jacobian_det), np.std(jacobian_det)), file=fo)
+            if args.save_image:
+                for k in ['seg1', 'seg2', 'img1', 'img2', 'real_flow', 'warped_moving', 'warped_seg_moving']:
+                    np.savez(os.path.join(args.image_dir, k), results[k])
 
 
 def short_name(checkpoint):

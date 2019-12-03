@@ -137,6 +137,10 @@ class FrameworkUnsupervised:
     def validate(self, sess, generator, keys=None, summary=False, predict=False):
         if keys is None:
             keys = ['dice_score', 'landmark_dist', 'pt_mask', 'jacc_score']
+            if predict:
+                keys.append('real_flow')
+                keys.append('warped_moving')
+                keys.append('warped_seg_moving')
             # if self.segmentation_class_value is not None:
             #     for k in self.segmentation_class_value:
             #         keys.append('jacc_{}'.format(k))

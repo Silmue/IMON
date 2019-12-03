@@ -9,6 +9,8 @@
 /evaluate/
 *.h5
 *.out
+view*
+.ipynb_checkpoints/
 # User-specific files
 *.suo
 *.user
