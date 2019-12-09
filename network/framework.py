@@ -154,7 +154,11 @@ class FrameworkUnsupervised:
                 full_results['img1'] = []
                 full_results['img2'] = []
         tflearn.is_training(False, sess)
+        cnt = 5
         for fd in generator:
+            if cnt==0 and predict:
+                break
+            cnt -= 1
             id1 = fd.pop('id1')
             id2 = fd.pop('id2')
             results = sess.run(self.get_predictions(
