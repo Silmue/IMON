@@ -3,7 +3,7 @@ import tflearn
 import numpy as np
 
 from .utils import Network
-from .base_networks import VTN, VoxelMorph, VTNAffineStem, IMON
+from .base_networks import VTN, VoxelMorph, VTNAffineStem, IMON, IMON_2
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .trilinear_sampler import TrilinearSampler
 
@@ -44,7 +44,7 @@ class RecursiveCascadedNetworks(Network):
         self.ortho_factor = ortho_factor
         self.reg_factor = reg_factor
         self.base_network = eval(base_network)
-        if base_network=='IMON':
+        if base_network in ['IMON', 'IMON_2']:
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
                 [(self.base_network("deform_stem_" + str(i),
                                     flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, n_pred=n_pred), {'raw_weight': 0})] * rep

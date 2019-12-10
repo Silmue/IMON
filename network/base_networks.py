@@ -72,7 +72,7 @@ class IMON_2(Network):
         self.channels = channels
         self.ipmethod = ipmethod
         self.n_pred = n_pred
-        self.reconstruction = Dense3DSpatialTransformer
+        self.reconstruction = Dense3DSpatialTransformer()
 
     def build(self, img1, img2):
         '''
@@ -119,7 +119,9 @@ class IMON_2(Network):
         deconv4 = upconvolveLeakyReLU(
             'deconv4', concat5, shape4[4], 4, 2, shape4[1:4])
         if self.n_pred>=4:
+            print(conv4_1.shape)
             conv4_1 = self.reconstruction([conv4_1, upsample(pred5, upsamplescale=2, ipmethod=self.ipmethod)])
+            print(conv4_1.shape)
         concat4 = tf.concat([conv4_1, deconv4, upsamp5to4],
                             4, 'concat4')  # channel = 512+256+2
 
