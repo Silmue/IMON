@@ -89,6 +89,8 @@ def main():
         return ret
 
     config = tf.ConfigProto()
+    config.intra_op_parallelism_threads = 8
+    config.inter_op_parallelism_threads = 8 
     config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         saver = tf.train.Saver(tf.get_collection(
