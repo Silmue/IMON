@@ -51,7 +51,8 @@ def upsample(input_, upsamplescale, ipmethod):
     xdim *= upsamplescale
     ydim *= upsamplescale
     zdim *= upsamplescale
-    deconv = tf.nn.conv3d_transpose(value=input_, filter=tf.ones([upsamplescale,upsamplescale,upsamplescale,channel_count,channel_count], tf.float32), output_shape=[4, xdim, ydim, zdim, channel_count],
+    bz = tf.shape(input_)[0]
+    deconv = tf.nn.conv3d_transpose(value=input_, filter=tf.ones([upsamplescale,upsamplescale,upsamplescale,channel_count,channel_count], tf.float32), output_shape=[bz, xdim, ydim, zdim, channel_count],
                                 strides=[1, upsamplescale, upsamplescale, upsamplescale, 1],
                                 padding="SAME", name='UpsampleDeconv')
     if ipmethod==1:
@@ -114,9 +115,9 @@ class IMON_3(Network):
         #     pred = pred_inc + upsample(pred, 2, self.ipmethod)
         # else:
         #     pred = pred_inc
-        for i in range(6, -1, -1):
+        for i in range(6, 0, -1):
             if i<6:
-                deconv = upconvolveLeakyReLU('deconv%d' % i, concat, shapes[i][4], 4, 2, shape[i][1:4])
+                deconv = upconvolveLeakyReLU('deconv%d' % i, concat, shapes[i][4], 4, 2, shapes[i][1:4])
                 concat = tf.concat([convs[i][-1], deconv], 4, 'concat%d' % i)
             if self.n_pred >= i:
                 pred_inc = convolve('pred%d' % i, concat, dims, 3, 1)
@@ -124,9 +125,9 @@ class IMON_3(Network):
                     pred = pred_inc
                 else:
                     pred += pred_inc
-                if i>0:
+                if i>1:
                     pred = upsample(pred, 2, self.ipmethod)
-                    convs[i-1].append(self.reconstruction(convs[i - 1][-1], 4, pred // (2 ** i)))
+                    convs[i-1].append(self.recons(convs[i - 1][-1], 4, pred // (2 ** i)))
 
         return {'flow': pred * self.flow_multiplier}
 
