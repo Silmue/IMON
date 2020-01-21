@@ -22,7 +22,7 @@ parser.add_argument('-g', '--gpu', type=str, default='-1',
                     help='Specifies gpu device(s)')
 parser.add_argument('-c', '--checkpoint', type=str, default=None,
                     help='Specifies a previous checkpoint to start with')
-parser.add_argument('-d', '--dataset', type=str, default="datasets/liver.json",
+parser.add_argument('-d', '--dataset', type=str, default="datasets/brain.json",
                     help='Specifies a data config')
 parser.add_argument('--batch', type=int, default=4,
                     help='Number of image pairs per batch')
@@ -40,7 +40,7 @@ parser.add_argument('--clear_steps', action='store_true')
 parser.add_argument('--finetune', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
-parser.add_argument('--n_pred', type=int, default=4)
+parser.add_argument('--n_pred', type=int, default=6)
 parser.add_argument('--ipmethod', type=int, default=0)
 args = parser.parse_args()
 
