@@ -3,7 +3,7 @@ import tflearn
 import numpy as np
 
 from .utils import Network
-from .base_networks import VTN, VoxelMorph, VTNAffineStem, IMON, IMON_2, IMON_3
+from .base_networks import *
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .trilinear_sampler import TrilinearSampler
 
@@ -37,7 +37,7 @@ class RecursiveCascadedNetworks(Network):
                  base_network, n_cascades, rep=1,
                  det_factor=0.1, ortho_factor=0.1, reg_factor=1.0,
                  extra_losses={}, warp_gradient=True,
-                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=4,
+                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=4, depth = 5,
                  **kwargs):
         super().__init__(name)
         self.det_factor = det_factor
@@ -48,6 +48,11 @@ class RecursiveCascadedNetworks(Network):
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
                 [(self.base_network("deform_stem_" + str(i),
                                     flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, n_pred=n_pred), {'raw_weight': 0})] * rep
+                for i in range(n_cascades)], [])
+        elif base_network in ['Siamese']:
+            self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
+                [(self.base_network("deform_stem_" + str(i),
+                                    flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, depth=depth), {'raw_weight': 0})] * rep
                 for i in range(n_cascades)], [])
         else:
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
@@ -123,7 +128,7 @@ class RecursiveCascadedNetworks(Network):
                         img1, stem_result['warped'])
                 if params['reg_weight'] > 0:
                     stem_result['reg_loss'] = self.regularize_loss(
-                        stem_result['flow']) * self.reg_factor
+                        stem_result['flow'], img1.shape.as_list()) * self.reg_factor
                 stem_result['loss'] = sum(
                     [stem_result[k] * params[k.replace('loss', 'weight')] for k in stem_result if k.endswith('loss')])
 
@@ -227,10 +232,11 @@ class RecursiveCascadedNetworks(Network):
         raw_loss = tf.reduce_sum(raw_loss)
         return raw_loss
 
-    def regularize_loss(self, flow):
+    def regularize_loss(self, flow, shape):
+        # print('--------------------\n{}-------------------\n'.format(tf.shape(flow).as_list()))
         ret = ((tf.nn.l2_loss(flow[:, 1:, :, :] - flow[:, :-1, :, :]) +
                 tf.nn.l2_loss(flow[:, :, 1:, :] - flow[:, :, :-1, :]) +
-                tf.nn.l2_loss(flow[:, :, :, 1:] - flow[:, :, :, :-1])) / np.prod(flow.shape.as_list()[1:5]))
+                tf.nn.l2_loss(flow[:, :, :, 1:] - flow[:, :, :, :-1])) / np.prod(shape[1:5]))
         return ret
 
     def jacobian_det(self, flow):

@@ -46,8 +46,9 @@ def upconvolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride, t
                                 targetShape, stddev, reuse),
                      alpha, opName+'_rectified')
 
-def upsample(input_, upsamplescale, ipmethod):
-    bs, xdim, ydim, zdim, channel_count = input_.shape.as_list()
+def upsample(input_, upsamplescale, ipmethod, shape):
+    bs, xdim, ydim, zdim, channel_count = shape
+    channel_count = 3
     xdim *= upsamplescale
     ydim *= upsamplescale
     zdim *= upsamplescale
@@ -67,8 +68,57 @@ def upsample(input_, upsamplescale, ipmethod):
         return deconv
 
 
+class Siamese(Network):
+    def __init__(self, name, flow_multiplier=1., channels=8, ipmethod=0, depth = 5, **kwargs):
+        super().__init__(name, **kwargs)
+        self.flow_multiplier = flow_multiplier
+        self.channels = channels
+        self.ipmethod = ipmethod
+        self.depth = depth
+        self.reconstruction = Dense3DSpatialTransformer()
+
+    def build(self, imgf, imgm):
+        '''
+            img1, img2, flow : tensor of shape [batch, X, Y, Z, C]
+        '''
+
+        dims = 3
+        c = self.channels
+        # 16 * 32 = 512 channels
+        convf = [convolveLeakyReLU('conv0_f', imgf, c, 3, 1)]
+        convm = [convolveLeakyReLU('conv0_m', imgm, c, 3, 1)]
+        shapes = [convf[-1].shape.as_list()]
+        for i in range(1, self.depth+1):
+            convf.append(convolveLeakyReLU('conv{}_f'.format(i), convf[-1], c<<i, 3, 2))
+            convm.append(convolveLeakyReLU('conv{}_m'.format(i), convm[-1], c<<i, 3, 2))
+            shapes.append(convf[-1].shape.as_list())
+        concat = [tf.concat([convf[-1], convm[-1]], 4, 'concat{}'.format(self.depth))]
+        iconv = []
+        pred = []
+        pred_inc = []
+        deconv = []
+        print('-------------------\n conv shape:{}\n----------------------\n'.format(shapes))
+
+        for i in range(self.depth, 0, -1):
+            iconv.append(convolveLeakyReLU('iconv{}'.format(i), concat[-1], shapes[i][-1], 3, 1))
+            # pred_inc.append(upconvolveLeakyReLU('pred_inc{}'.format(i), iconv[-1], 3, 4, 2, shapes[i-1][1:-1]))
+            # pred.append(self.reconstruction([pred_inc[-1], UpSampling3D()(pred[-1]*2)]) if len(pred) else pred_inc[-1])
+            deconv.append(upconvolveLeakyReLU('deconv{}'.format(i-1), iconv[-1], shapes[i-1][-1], 4, 2, shapes[i-1][1:-1]))
+            pred_inc.append(convolveLeakyReLU('pred_inc{}'.format(i), deconv[-1], 3, 3, 1))
+            pred.append(pred_inc[-1]+self.reconstruction([pred_inc[-1], UpSampling3D()(pred[-1]*2)]) if len(pred) else pred_inc[-1])
+            concat.append(tf.concat([deconv[-1], self.reconstruction([convm[i-1], pred[-1]]), convf[i-1]], 4, 'concat{}'.format(i-1)))
+        iconv.append(convolveLeakyReLU('iconv0', concat[-1], shapes[0][-1], 3, 1))
+        pred_inc.append(convolveLeakyReLU('pred_inc0', iconv[-1], 3, 3, 1))
+        pred[-1] = pred_inc[-1]+self.reconstruction([pred_inc[-1], pred[-1]])
+        print('-------------------\n deconv shape:{}\n----------------------\n'.format([x.shape.as_list() for x in deconv]))
+        print('-------------------\n pred shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred]))
+        print('-------------------\n predinc shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred_inc]))
+
+        return {'flow': pred[-1] * self.flow_multiplier}
+
+
 class IMON_3(Network):
-    def __init__(self, name, flow_multiplier=1., channels=16, ipmethod=0, n_pred=6, div=4, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=8, ipmethod=0, n_pred=6, div=2, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -221,6 +271,7 @@ class IMON(Network):
         self.channels = channels
         self.ipmethod = ipmethod
         self.n_pred = n_pred
+        
 
     def build(self, img1, img2):
         '''
@@ -292,6 +343,7 @@ class IMON(Network):
             pred += upsample(eval('pred{}'.format(i)), 2**i, self.ipmethod)
 
         return {'flow': pred * 20 * self.flow_multiplier}
+
 
 
 class VTN(Network):

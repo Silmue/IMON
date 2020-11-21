@@ -55,6 +55,10 @@ class Dense3DSpatialTransformer(Layer):
         return self._transform(inputs[0], inputs[1][:, :, :, :, 1],
                                inputs[1][:, :, :, :, 0], inputs[1][:, :, :, :, 2])
 
+    # def call(self, input0, input1):
+    #     return self._transform(input0, input1[:, :, :, :, 1],
+    #                            input1[:, :, :, :, 0], input1[:, :, :, :, 2])
+
     def compute_output_shape(self, input_shape):
         return input_shape[0]
 
@@ -113,6 +117,7 @@ class Dense3DSpatialTransformer(Layer):
         width = tf.shape(im)[2]
         depth = tf.shape(im)[3]
         channels = im.get_shape().as_list()[4]
+        # print(im.get_shape().as_list())
 
         out_height = tf.shape(x)[1]
         out_width = tf.shape(x)[2]

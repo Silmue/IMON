@@ -7,6 +7,7 @@
 /logs/
 /weights/
 /evaluate/
+*.zip
 *.h5
 *.out
 *.exp

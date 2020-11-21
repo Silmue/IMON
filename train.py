@@ -24,15 +24,15 @@ parser.add_argument('-c', '--checkpoint', type=str, default=None,
                     help='Specifies a previous checkpoint to start with')
 parser.add_argument('-d', '--dataset', type=str, default="datasets/brain.json",
                     help='Specifies a data config')
-parser.add_argument('--batch', type=int, default=4,
-                    help='Number of image pairs per batch')
+parser.add_argument('--batch', type=int, default=1,
+                    help='Number of image pairs per batch') 
 parser.add_argument('--round', type=int, default=20000,
                     help='Number of batches per epoch')
 parser.add_argument('--epochs', type=float, default=5,
                     help='Number of epochs')
 parser.add_argument('--fast_reconstruction', action='store_true')
 parser.add_argument('--debug', action='store_true')
-parser.add_argument('--val_steps', type=int, default=100)
+parser.add_argument('--val_steps', type=int, default=500)
 parser.add_argument('--net_args', type=str, default='')
 parser.add_argument('--data_args', type=str, default='')
 parser.add_argument('--lr', type=float, default=1e-4)
@@ -42,7 +42,9 @@ parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
 parser.add_argument('--n_pred', type=int, default=6)
 parser.add_argument('--ipmethod', type=int, default=0)
+parser.add_argument('--depth', type=int, default=5)
 args = parser.parse_args()
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
@@ -71,6 +73,7 @@ def main():
     Framework.net_args['n_cascades'] = args.n_cascades
     Framework.net_args['rep'] = args.rep
     Framework.net_args['n_pred'] = args.n_pred
+    Framework.net_args['depth'] = args.depth
     Framework.net_args['ipmethod'] = args.ipmethod
     Framework.net_args.update(eval('dict({})'.format(args.net_args)))
     with open(os.path.join(args.dataset), 'r') as f:
@@ -89,8 +92,8 @@ def main():
         return ret
 
     config = tf.ConfigProto()
-    config.intra_op_parallelism_threads = 8
-    config.inter_op_parallelism_threads = 8 
+    # config.intra_op_parallelism_threads = 8
+    # config.inter_op_parallelism_threads = 8 
     config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         saver = tf.train.Saver(tf.get_collection(
@@ -214,7 +217,7 @@ def main():
                                          set_tf_keys(fd))
                         summaryWriter.add_summary(summ, steps)
 
-                if steps < 500 or steps % 500 == 0:
+                if steps < 500 or steps % 500 == 0 and not args.debug:
                     print('*%s* ' % run_id,
                           time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
                           'Steps %d, Total time %.2f, data %.2f%%. Loss %.3e lr %.3e' % (steps,
