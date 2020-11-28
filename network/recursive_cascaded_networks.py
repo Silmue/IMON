@@ -37,22 +37,17 @@ class RecursiveCascadedNetworks(Network):
                  base_network, n_cascades, rep=1,
                  det_factor=0.1, ortho_factor=0.1, reg_factor=1.0,
                  extra_losses={}, warp_gradient=True,
-                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=4, depth = 5,
+                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=3, depth = 5,
                  **kwargs):
         super().__init__(name)
         self.det_factor = det_factor
         self.ortho_factor = ortho_factor
         self.reg_factor = reg_factor
         self.base_network = eval(base_network)
-        if base_network in ['IMON', 'IMON_2', 'IMON_3']:
+        if base_network in ['Siamese', 'SiameseLink']:
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
                 [(self.base_network("deform_stem_" + str(i),
-                                    flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, n_pred=n_pred), {'raw_weight': 0})] * rep
-                for i in range(n_cascades)], [])
-        elif base_network in ['Siamese']:
-            self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
-                [(self.base_network("deform_stem_" + str(i),
-                                    flow_multiplier=1.0 / n_cascades, ipmethod=ipmethod, depth=depth), {'raw_weight': 0})] * rep
+                                    flow_multiplier=1.0 / n_cascades, n_pred=n_pred, depth=depth), {'raw_weight': 0})] * rep
                 for i in range(n_cascades)], [])
         else:
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
@@ -160,7 +155,10 @@ class RecursiveCascadedNetworks(Network):
             dices = [dice_score]
         else:
             def mask_class(seg, value):
-                return tf.cast(tf.abs(seg - value) < 0.5, tf.float32) * 255
+                if type(value) is list:
+                    return tf.add_n([mask_class(seg, v) for v in value])
+                else:
+                    return tf.cast(tf.abs(seg - value) < 0.5, tf.float32) * 255
             jaccs = []
             dices = []
             fixed_segs = []
