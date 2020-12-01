@@ -210,7 +210,7 @@ def main():
                 # else:
                 #     pos_lr = lr * 100
                 pos_lr = lr
-                if pos_lr>0 and steps>1000:
+                if pos_lr>0:
                     _ = sess.run(framework.posOpt,
                                     set_tf_keys(fd, pos_learningRate=pos_lr))
 
@@ -224,10 +224,10 @@ def main():
                 #     neg_lr = lr
                 # else:
                 #     neg_lr = 0
-                neg_lr = lr
+                neg_lr = lr*0.1
                 if neg_lr>0:
                     _ = sess.run(framework.negOpt,
-                                    set_tf_keys(fd, neg_learningRate=neg_lr if steps>1000 else neg_lr*0.01))
+                                    set_tf_keys(fd, neg_learningRate=neg_lr))
 
                 summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
                                set_tf_keys(fd, learningRate=lr))

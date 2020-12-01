@@ -6,6 +6,8 @@ from tflearn.initializations import normal
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .utils import Network, ReLU, LeakyReLU
 
+defautl_channel = 16
+
 
 def convolve(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False, weights_init='uniform_scaling'):
     return tflearn.layers.conv_3d(inputLayer, outputChannel, kernelSize, strides=stride,
@@ -82,7 +84,7 @@ def encoderBlock(opName, inputLayer, outputChannel, kernelSize, stride, alpha=0.
 
 
 class SiameseLink(Network):
-    def __init__(self, name, flow_multiplier=1., channels=8, ipmethod=0, depth=5, n_pred=3, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, ipmethod=0, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -99,14 +101,14 @@ class SiameseLink(Network):
         dims = 3
         c = self.channels
         # 16 * 32 = 512 channels
-        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1, reuse=True)]
+        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1)]
         convm = [convolveLeakyReLU('conv0', imgm, c, 3, 1, reuse=True)]
         shapes = [convf[-1].shape.as_list()]
         for i in range(1, self.depth+1):
             convf.append(encoderBlock(
-                'conv{}_f'.format(i), convf[-1], c << i, 3, 2, reuse=True))
+                'conv{}'.format(i), convf[-1], c << i, 3, 2))
             convm.append(encoderBlock(
-                'conv{}_m'.format(i), convm[-1], c << i, 3, 2, reuse=True))
+                'conv{}'.format(i), convm[-1], c << i, 3, 2, reuse=True))
             shapes.append(convf[-1].shape.as_list())
         concat = [tf.concat([convf[-1], convm[-1]], 4,
                             'concat{}'.format(self.depth))]
@@ -147,7 +149,7 @@ class SiameseLink(Network):
 
 
 class Siamese(Network):
-    def __init__(self, name, flow_multiplier=1., channels=8, ipmethod=0, depth=5, n_pred=3, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, ipmethod=0, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -164,12 +166,12 @@ class Siamese(Network):
         dims = 3
         c = self.channels
         # 16 * 32 = 512 channels
-        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1, reuse=True)]
+        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1)]
         convm = [convolveLeakyReLU('conv0', imgm, c, 3, 1, reuse=True)]
         shapes = [convf[-1].shape.as_list()]
         for i in range(1, self.depth+1):
             convf.append(convolveLeakyReLU(
-                'conv{}'.format(i), convf[-1], c << i, 3, 2, reuse=True))
+                'conv{}'.format(i), convf[-1], c << i, 3, 2))
             convm.append(convolveLeakyReLU(
                 'conv{}'.format(i), convm[-1], c << i, 3, 2, reuse=True))
             shapes.append(convf[-1].shape.as_list())
@@ -214,7 +216,7 @@ class Siamese(Network):
 
 
 class VTN(Network):
-    def __init__(self, name, flow_multiplier=1., channels=8, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -290,7 +292,7 @@ class VTN(Network):
 
 
 class VoxelMorph(Network):
-    def __init__(self, name, flow_multiplier=1., channels=8, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.encoders = [m * channels for m in [1, 2, 2, 2]]
