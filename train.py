@@ -43,6 +43,7 @@ parser.add_argument('--logs', type=str, default='')
 parser.add_argument('--n_pred', type=int, default=3)
 parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
+parser.add_argument('--discriminator', type=str, default='')
 args = parser.parse_args()
 
 
@@ -80,7 +81,7 @@ def main():
         cfg = json.load(f)
         image_size = cfg.get('image_size', [128, 128, 128])
         image_type = cfg.get('image_type')
-    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction)
+    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction, discriminator=args.discriminator)
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
     print('Graph built.')
 
@@ -196,7 +197,42 @@ def main():
             fd.pop('id2', [])
             t1 = default_timer()
             tflearn.is_training(True, session=sess)
-            summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],
+            
+            if framework.discriminator:
+                # pos_prob = np.mean(sess.run([framework.predictions['pos_prob']],
+                #                set_tf_keys(fd)))
+                # if pos_prob>0.75:
+                #     pos_lr = 0
+                # elif pos_prob>0.5:
+                #     pos_lr = lr 
+                # elif pos_prob>0.25:
+                #     pos_lr = lr * 10
+                # else:
+                #     pos_lr = lr * 100
+                pos_lr = lr
+                if pos_lr>0 and steps>1000:
+                    _ = sess.run(framework.posOpt,
+                                    set_tf_keys(fd, pos_learningRate=pos_lr))
+
+                # neg_prob = np.mean(sess.run([framework.predictions['neg_prob']],
+                #                set_tf_keys(fd)))
+                # if neg_prob>0.75:
+                #     neg_lr = lr * 100
+                # elif neg_prob>0.5:
+                #     neg_lr = lr * 10
+                # elif neg_prob>0.25:
+                #     neg_lr = lr
+                # else:
+                #     neg_lr = 0
+                neg_lr = lr
+                if neg_lr>0:
+                    _ = sess.run(framework.negOpt,
+                                    set_tf_keys(fd, neg_learningRate=neg_lr if steps>1000 else neg_lr*0.01))
+
+                summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
+                               set_tf_keys(fd, learningRate=lr))
+            else:
+                summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],
                                set_tf_keys(fd, learningRate=lr))
 
             for v in tf.Summary().FromString(summ).value:

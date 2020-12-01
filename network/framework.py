@@ -6,6 +6,7 @@ from . import transform
 from .utils import MultiGPUs
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .recursive_cascaded_networks import RecursiveCascadedNetworks
+from .base_networks import *
 
 
 def set_tf_keys(feed_dict, **kwargs):
@@ -22,12 +23,16 @@ class FrameworkUnsupervised:
     net_args = {'class': RecursiveCascadedNetworks}
     framework_name = 'frm'
 
-    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False):
+    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False, discriminator=None):
         network_class = self.net_args.get('class', RecursiveCascadedNetworks)
         self.summaryType = self.net_args.pop('summary', 'basic')
 
         self.reconstruction = Fast3DTransformer() if fast_reconstruction else Dense3DSpatialTransformer()
 
+        if discriminator:
+            self.discriminator = eval(discriminator)(name=discriminator)
+        else:
+            self.discriminator = None
         # input place holder
         img1 = tf.placeholder(dtype=tf.float32, shape=[
                               None, 128, 128, 128, 1], name='voxel1')
@@ -78,8 +83,13 @@ class FrameworkUnsupervised:
             raise NotImplementedError('Augmentation {}'.format(aug))
 
         learningRate = tf.placeholder(tf.float32, [], 'learningRate')
+        posLearningRate = tf.placeholder(tf.float32, [], 'pos_learningRate')
+        negLearningRate = tf.placeholder(tf.float32, [], 'neg_learningRate')
         if not validation:
             adamOptimizer = tf.train.AdamOptimizer(learningRate)
+            posOptimizer = tf.train.RMSPropOptimizer(posLearningRate)
+            negOptimizer = tf.train.RMSPropOptimizer(negLearningRate)
+
 
         self.segmentation_class_value = segmentation_class_value
         self.network = network_class(
@@ -96,7 +106,11 @@ class FrameworkUnsupervised:
             if validation:
                 self.predictions = gpus(self.network, net_pls)
             else:
-                self.predictions, self.adamOpt = gpus(
+                if self.discriminator:
+                    self.predictions, self.adamOpt, self.dOpt, self.posOpt, self.negOpt = gpus(
+                    self.network, net_pls, self.discriminator, opt=adamOptimizer, popt=posOptimizer, nopt=negOptimizer)
+                else:
+                    self.predictions, self.adamOpt = gpus(
                     self.network, net_pls, opt=adamOptimizer)
         self.build_summary(self.predictions)
 
@@ -107,7 +121,7 @@ class FrameworkUnsupervised:
     def build_summary(self, predictions):
         self.loss = tf.reduce_mean(predictions['loss'])
         for k in predictions:
-            if k.find('loss') != -1:
+            if k.find('loss') != -1 or k.find('prob') != -1:
                 tf.summary.scalar(k, tf.reduce_mean(predictions[k]))
         self.summaryOp = tf.summary.merge_all()
 

@@ -132,11 +132,15 @@ class MultiGPUs:
     def __init__(self, num):
         self.num = num
 
-    def __call__(self, net, args, opt=None):
+    def __call__(self, net, args, D=None, opt=None, popt=None, nopt=None):
         args = [self.reshape(arg) for arg in args]
         results = []
         grads = []
+        dgrads = []
+        posgrads = []
+        neggrads = []
         self.current_device = None
+
         for i in range(self.num):
             def auto_gpu(opr):
                 # if opr.name.find('stack') != -1:
@@ -149,8 +153,26 @@ class MultiGPUs:
                 self.current_device = i
                 net.controller = self
                 result = net(*[arg[i] for arg in args])
+                if D is not None:
+                    neg_result = D(result['image_reconstruct'], result['image_fixed'])
+                    pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
+                    result['D_raw_loss'] = neg_result['positive']
+                    result['D_loss'] = 100*(result['0_loss']+result['1_reg_loss']) + result['D_raw_loss']
+                    result['D_loss_pos'] = pos_result['positive']
+                    result['D_loss_neg'] = neg_result['negative']
+                    result['neg_prob'] = neg_result['prob']
+                    result['pos_prob'] = pos_result['prob']
+            
                 results.append(result)
                 if opt is not None:
+                    if D is not None:
+                        print(D.trainable_variables)
+                        dgrads.append(opt.compute_gradients(
+                            result['D_loss'], var_list=net.trainable_variables))
+                        posgrads.append(popt.compute_gradients(
+                            result['D_loss_pos'], var_list=D.trainable_variables))
+                        neggrads.append(nopt.compute_gradients(
+                            result['D_loss_neg'], var_list=D.trainable_variables))
                     grads.append(opt.compute_gradients(
                         result['loss'], var_list=net.trainable_variables))
 
@@ -166,7 +188,13 @@ class MultiGPUs:
 
             if grads:
                 op = opt.apply_gradients(self.average_gradients(grads))
-                return concat_result, op
+                if D is None:
+                    return concat_result, op
+                else:
+                    dop = opt.apply_gradients(self.average_gradients(dgrads))
+                    posop = popt.apply_gradients(self.average_gradients(posgrads))
+                    negop = nopt.apply_gradients(self.average_gradients(neggrads))
+                    return concat_result, op, dop, posop, negop
             else:
                 return concat_result
 

@@ -99,14 +99,14 @@ class SiameseLink(Network):
         dims = 3
         c = self.channels
         # 16 * 32 = 512 channels
-        convf = [convolveLeakyReLU('conv0_f', imgf, c, 3, 1)]
-        convm = [convolveLeakyReLU('conv0_m', imgm, c, 3, 1)]
+        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1, reuse=True)]
+        convm = [convolveLeakyReLU('conv0', imgm, c, 3, 1, reuse=True)]
         shapes = [convf[-1].shape.as_list()]
         for i in range(1, self.depth+1):
             convf.append(encoderBlock(
-                'conv{}_f'.format(i), convf[-1], c << i, 3, 2))
+                'conv{}_f'.format(i), convf[-1], c << i, 3, 2, reuse=True))
             convm.append(encoderBlock(
-                'conv{}_m'.format(i), convm[-1], c << i, 3, 2))
+                'conv{}_m'.format(i), convm[-1], c << i, 3, 2, reuse=True))
             shapes.append(convf[-1].shape.as_list())
         concat = [tf.concat([convf[-1], convm[-1]], 4,
                             'concat{}'.format(self.depth))]
@@ -164,14 +164,14 @@ class Siamese(Network):
         dims = 3
         c = self.channels
         # 16 * 32 = 512 channels
-        convf = [convolveLeakyReLU('conv0_f', imgf, c, 3, 1)]
-        convm = [convolveLeakyReLU('conv0_m', imgm, c, 3, 1)]
+        convf = [convolveLeakyReLU('conv0', imgf, c, 3, 1, reuse=True)]
+        convm = [convolveLeakyReLU('conv0', imgm, c, 3, 1, reuse=True)]
         shapes = [convf[-1].shape.as_list()]
         for i in range(1, self.depth+1):
             convf.append(convolveLeakyReLU(
-                'conv{}_f'.format(i), convf[-1], c << i, 3, 2))
+                'conv{}'.format(i), convf[-1], c << i, 3, 2, reuse=True))
             convm.append(convolveLeakyReLU(
-                'conv{}_m'.format(i), convm[-1], c << i, 3, 2))
+                'conv{}'.format(i), convm[-1], c << i, 3, 2, reuse=True))
             shapes.append(convf[-1].shape.as_list())
         concat = [tf.concat([convf[-1], convm[-1]], 4,
                             'concat{}'.format(self.depth))]
@@ -468,19 +468,36 @@ class FullDiscriminator(Network):
         conv = []
         for i in range(3):
             conv.append(convolveLeakyReLU('conv%d' % i, conv[-1] if len(conv) else concatImgs, self.channels << i, 3, 2))
-        fc = tflearn.fully_connected(conv[-1], 1, activation='sigmoid')
-
+        fc = tflearn.fully_connected(conv[-1], 1, weights_init=tflearn.initializations.normal(shape=None, mean=0.0, stddev=1e-5))
+        pr = tf.sigmoid(fc)
         return {
-            'prob': fc
+            'prob': pr,
+            'positive': tf.reduce_sum(-tf.log(tf.clip_by_value(pr, 1e-8, 1.0))),
+            'negative': tf.reduce_sum(-tf.log(tf.clip_by_value(1-pr, 1e-8, 1.0)))
         }
+        # return {
+        #     'prob': fc,
+        #     'positive': tf.reduce_sum(1-fc),
+        #     'negative': tf.reduce_sum(fc)
+        # }
 
-
+ 
 class FeatureExtractor(Network):
     def __init__(self, name, channels=16, **kwargs):
-        self.channels = 16
+        super().__init__(name, **kwargs)
+        self.channels = channels
 
     def build(self, img):
-        pass
+        conv = []
+        shape = [img.shape.as_list()]
+        shape[0][-1] = self.channels
+        for i in range(3):
+            conv.append(convolveLeakyReLU('fconv%d' % i, conv[-1] if len(conv) else img, self.channels << i, 3, 2, reuse=True))
+            shape.append(conv[-1].shape.as_list())
+        concat = [conv[-1]]
+        for i in range(2, -1, -1):
+            deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shape[i][4], 4, 2, shape[i][1:4], reuse=True))
+        return tflearn.activation(deconv[-1], activation='relu')
 
 
 class PartDiscriminator(Network):
@@ -489,6 +506,9 @@ class PartDiscriminator(Network):
         self.feature = FeatureExtractor()
         self.loss = loss
 
+    def trainable_variables(self):
+        return self.feature.trainable_variables
+
     def build(self, img1, img2):
         '''
             img1, img2, flow : tensor of shape [batch, X, Y, Z, C]
@@ -496,9 +516,17 @@ class PartDiscriminator(Network):
         f1 = self.feature(img1)
         f2 = self.feature(img2)
         if self.loss=='cc':
-            return tf.reduce_sum(1-correlation_coefficient(f1, f2))
+            cc = correlation_coefficient(f1, f2)
+            return {
+                'positive': tf.reduce_sum(1-cc),
+                'negative': tf.reduce_sum(cc)
+            }
         else:
-            return tf.nn.l2_loss(f1-f2)
+            l2 = tf.nn.l2_loss(f1-f2)
+            return {
+                'positive': l2,
+                'negative': -l2
+            }
 
 
 def correlation_coefficient(img1, warped_img2):
