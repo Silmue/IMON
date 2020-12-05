@@ -207,6 +207,8 @@ class RecursiveCascadedNetworks(Network):
             ret['warped_moving_%d' % i] = r['warped']
             ret['flow_%d' % i] = r['flow']
             ret['real_flow_%d' % i] = r['agg_flow']
+            if 'flow_inc' in r.keys():
+                ret['flow_inc_%d' % i] = r['flow_inc']
 
         return ret
 

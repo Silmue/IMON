@@ -139,6 +139,7 @@ class MultiGPUs:
         dgrads = []
         posgrads = []
         neggrads = []
+        pairgrads = []
         self.current_device = None
 
         for i in range(self.num):
@@ -157,22 +158,24 @@ class MultiGPUs:
                     neg_result = D(result['image_reconstruct'], result['image_fixed'])
                     pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
                     result['D_raw_loss'] = neg_result['positive']
-                    result['D_loss'] = 100*(result['0_loss']+result['1_reg_loss']) + result['D_raw_loss']
+                    result['D_loss'] = (result['0_loss']+result['1_reg_loss']) + result['D_raw_loss']
                     result['D_loss_pos'] = pos_result['positive']
                     result['D_loss_neg'] = neg_result['negative']
                     result['neg_prob'] = neg_result['prob']
                     result['pos_prob'] = pos_result['prob']
+                    result['Pair_loss'] = tf.clip_by_value(result['D_loss_pos']+result['D_loss_neg'], -1, 0)
             
                 results.append(result)
                 if opt is not None:
                     if D is not None:
-                        print(D.trainable_variables)
                         dgrads.append(opt.compute_gradients(
                             result['D_loss'], var_list=net.trainable_variables))
                         posgrads.append(popt.compute_gradients(
                             result['D_loss_pos'], var_list=D.trainable_variables))
                         neggrads.append(nopt.compute_gradients(
                             result['D_loss_neg'], var_list=D.trainable_variables))
+                        pairgrads.append(popt.compute_gradients(
+                            result['Pair_loss'], var_list=D.trainable_variables))
                     grads.append(opt.compute_gradients(
                         result['loss'], var_list=net.trainable_variables))
 
@@ -194,7 +197,8 @@ class MultiGPUs:
                     dop = opt.apply_gradients(self.average_gradients(dgrads))
                     posop = popt.apply_gradients(self.average_gradients(posgrads))
                     negop = nopt.apply_gradients(self.average_gradients(neggrads))
-                    return concat_result, op, dop, posop, negop
+                    pairop = popt.apply_gradients(self.average_gradients(pairgrads))
+                    return concat_result, op, dop, posop, negop, pairop
             else:
                 return concat_result
 

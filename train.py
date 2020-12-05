@@ -209,10 +209,10 @@ def main():
                 #     pos_lr = lr * 10
                 # else:
                 #     pos_lr = lr * 100
-                pos_lr = lr
-                if pos_lr>0:
-                    _ = sess.run(framework.posOpt,
-                                    set_tf_keys(fd, pos_learningRate=pos_lr))
+                # pos_lr = lr*0.2
+                # if pos_lr>0 and steps>1000:
+                #     _ = sess.run(framework.posOpt,
+                #                     set_tf_keys(fd, pos_learningRate=pos_lr))
 
                 # neg_prob = np.mean(sess.run([framework.predictions['neg_prob']],
                 #                set_tf_keys(fd)))
@@ -224,12 +224,15 @@ def main():
                 #     neg_lr = lr
                 # else:
                 #     neg_lr = 0
-                neg_lr = lr*0.1
-                if neg_lr>0:
-                    _ = sess.run(framework.negOpt,
-                                    set_tf_keys(fd, neg_learningRate=neg_lr))
+                # neg_lr = lr*0.1
+                # if neg_lr>0:
+                #     _ = sess.run(framework.negOpt,
+                #                     set_tf_keys(fd, neg_learningRate=neg_lr))
+                _ = sess.run(framework.pairOpt,
+                    set_tf_keys(fd, pos_learningRate=lr*0.002))
 
-                summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
+                # summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
+                summ, _ = sess.run([framework.summaryExtra, framework.dOpt],
                                set_tf_keys(fd, learningRate=lr))
             else:
                 summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],

@@ -6,7 +6,7 @@ from tflearn.initializations import normal
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .utils import Network, ReLU, LeakyReLU
 
-defautl_channel = 16
+defautl_channel = 8
 
 
 def convolve(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False, weights_init='uniform_scaling'):
@@ -145,7 +145,8 @@ class SiameseLink(Network):
         # print('-------------------\n pred shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred]))
         # print('-------------------\n predinc shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred_inc]))
 
-        return {'flow': pred[-1] * self.flow_multiplier}
+        return {'flow': pred[-1] * self.flow_multiplier,
+                'pred_inc': pred_inc}
 
 
 class Siamese(Network):
@@ -212,7 +213,8 @@ class Siamese(Network):
         # print('-------------------\n pred shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred]))
         # print('-------------------\n predinc shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred_inc]))
 
-        return {'flow': pred[-1] * self.flow_multiplier}
+        return {'flow': pred[-1] * self.flow_multiplier,
+                'pred_inc': pred_inc}
 
 
 class VTN(Network):
@@ -491,23 +493,27 @@ class FeatureExtractor(Network):
 
     def build(self, img):
         conv = []
-        shape = [img.shape.as_list()]
-        shape[0][-1] = self.channels
+        shapes = [img.shape.as_list()]
+        shapes[0][-1] = self.channels
         for i in range(3):
-            conv.append(convolveLeakyReLU('fconv%d' % i, conv[-1] if len(conv) else img, self.channels << i, 3, 2, reuse=True))
-            shape.append(conv[-1].shape.as_list())
-        concat = [conv[-1]]
+            conv.append(convolveLeakyReLU('fconv%d' % i, conv[-1] if len(conv) else img, self.channels << i, 3, 2))
+            shapes.append(conv[-1].shape.as_list())
+        # print(shapes)
+        concat = []
+        deconv = []
         for i in range(2, -1, -1):
-            deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shape[i][4], 4, 2, shape[i][1:4], reuse=True))
-        return tflearn.activation(deconv[-1], activation='relu')
+            concat.append(tf.concat([deconv[-1], conv[i]], axis=4) if len(deconv) else conv[i])
+            deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shapes[i][4], 4, 2, [128>>i]*3))
+        return deconv[-1]
 
 
 class PartDiscriminator(Network):
-    def __init__(self, name, loss='cc', channels=16, **kwargs):
+    def __init__(self, name, loss='l2', channels=16, **kwargs):
         super().__init__(name, **kwargs)
-        self.feature = FeatureExtractor()
+        self.feature = FeatureExtractor('feature')
         self.loss = loss
 
+    @property
     def trainable_variables(self):
         return self.feature.trainable_variables
 
@@ -520,12 +526,14 @@ class PartDiscriminator(Network):
         if self.loss=='cc':
             cc = correlation_coefficient(f1, f2)
             return {
+                'prob' : tf.reduce_sum(cc),
                 'positive': tf.reduce_sum(1-cc),
                 'negative': tf.reduce_sum(cc)
             }
         else:
-            l2 = tf.nn.l2_loss(f1-f2)
+            l2 = tf.nn.l2_loss(f1-f2)/(128**3)
             return {
+                'prob' : l2,
                 'positive': l2,
                 'negative': -l2
             }

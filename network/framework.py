@@ -107,7 +107,7 @@ class FrameworkUnsupervised:
                 self.predictions = gpus(self.network, net_pls)
             else:
                 if self.discriminator:
-                    self.predictions, self.adamOpt, self.dOpt, self.posOpt, self.negOpt = gpus(
+                    self.predictions, self.adamOpt, self.dOpt, self.posOpt, self.negOpt, self.pairOpt = gpus(
                     self.network, net_pls, self.discriminator, opt=adamOptimizer, popt=posOptimizer, nopt=negOptimizer)
                 else:
                     self.predictions, self.adamOpt = gpus(
@@ -155,6 +155,7 @@ class FrameworkUnsupervised:
                 keys.append('real_flow')
                 keys.append('warped_moving')
                 keys.append('warped_seg_moving')
+                keys.append('flow_inc')
             # if self.segmentation_class_value is not None:
             #     for k in self.segmentation_class_value:
             #         keys.append('jacc_{}'.format(k))
