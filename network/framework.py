@@ -87,8 +87,8 @@ class FrameworkUnsupervised:
         negLearningRate = tf.placeholder(tf.float32, [], 'neg_learningRate')
         if not validation:
             adamOptimizer = tf.train.AdamOptimizer(learningRate)
-            posOptimizer = tf.train.RMSPropOptimizer(posLearningRate)
-            negOptimizer = tf.train.RMSPropOptimizer(negLearningRate)
+            posOptimizer = tf.train.AdamOptimizer(posLearningRate)
+            negOptimizer = tf.train.AdamOptimizer(negLearningRate)
 
 
         self.segmentation_class_value = segmentation_class_value

@@ -9,43 +9,43 @@ from .utils import Network, ReLU, LeakyReLU
 defautl_channel = 8
 
 
-def convolve(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False, weights_init='uniform_scaling'):
+def convolve(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False, weights_init='uniform_scaling', regularizer=None):
     return tflearn.layers.conv_3d(inputLayer, outputChannel, kernelSize, strides=stride,
-                                  padding='same', activation='linear', bias=True, scope=opName, reuse=reuse, weights_init=weights_init)
+                                  padding='same', activation='linear', bias=True, scope=opName, reuse=reuse, weights_init=weights_init, regularizer=regularizer)
 
 
-def convolveReLU(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False):
+def convolveReLU(opName, inputLayer, outputChannel, kernelSize, stride=1, stddev=1e-2, reuse=False, regularizer=None):
     return ReLU(convolve(opName, inputLayer,
                          outputChannel,
-                         kernelSize, stride, stddev=stddev, reuse=reuse),
+                         kernelSize, stride, stddev=stddev, reuse=reuse, regularizer=regularizer),
                 opName+'_rectified')
 
 
-def convolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride, alpha=0.1, stddev=1e-2, reuse=False):
+def convolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride=1, alpha=0.1, stddev=1e-2, reuse=False, regularizer=None):
     return LeakyReLU(convolve(opName, inputLayer,
                               outputChannel,
-                              kernelSize, stride, stddev, reuse),
+                              kernelSize, stride, stddev, reuse, regularizer=regularizer),
                      alpha, opName+'_leakilyrectified')
 
 
-def upconvolve(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, stddev=1e-2, reuse=False, weights_init='uniform_scaling'):
+def upconvolve(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, stddev=1e-2, reuse=False, weights_init='uniform_scaling', regularizer=None):
     return tflearn.layers.conv.conv_3d_transpose(inputLayer, outputChannel, kernelSize, targetShape, strides=stride,
-                                                 padding='same', activation='linear', bias=False, scope=opName, reuse=reuse, weights_init=weights_init)
+                                                 padding='same', activation='linear', bias=False, scope=opName, reuse=reuse, weights_init=weights_init, regularizer=regularizer)
 
 
-def upconvolveReLU(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, stddev=1e-2, reuse=False):
+def upconvolveReLU(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, stddev=1e-2, reuse=False, regularizer=None):
     return ReLU(upconvolve(opName, inputLayer,
                            outputChannel,
                            kernelSize, stride,
-                           targetShape, stddev, reuse),
+                           targetShape, stddev, reuse, regularizer=regularizer),
                 opName+'_rectified')
 
 
-def upconvolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, alpha=0.1, stddev=1e-2, reuse=False):
+def upconvolveLeakyReLU(opName, inputLayer, outputChannel, kernelSize, stride, targetShape, alpha=0.1, stddev=1e-2, reuse=False, regularizer=None):
     return LeakyReLU(upconvolve(opName, inputLayer,
                                 outputChannel,
                                 kernelSize, stride,
-                                targetShape, stddev, reuse),
+                                targetShape, stddev, reuse, regularizer=regularizer),
                      alpha, opName+'_rectified')
 
 
@@ -460,9 +460,10 @@ class VTNAffineStem(Network):
 
 
 class FullDiscriminator(Network):
-    def __init__(self, name, channels=16, **kwargs):
+    def __init__(self, name, channels=16, depth=4, **kwargs):
         super().__init__(name, **kwargs)
         self.channels = channels
+        self.depth = depth
 
     def build(self, img1, img2):
         '''
@@ -470,14 +471,14 @@ class FullDiscriminator(Network):
         '''
         concatImgs = tf.concat([img1, img2], 4, 'concatImgs')
         conv = []
-        for i in range(3):
+        for i in range(self.depth-1):
             conv.append(convolveLeakyReLU('conv%d' % i, conv[-1] if len(conv) else concatImgs, self.channels << i, 3, 2))
-        fc = tflearn.fully_connected(conv[-1], 1, weights_init=tflearn.initializations.normal(shape=None, mean=0.0, stddev=1e-5))
-        pr = tf.sigmoid(fc)
+        conv_pr = tf.sigmoid(convolve('convPr', conv[-1], 1, 3))
+        pr = tf.reduce_mean(conv_pr)
         return {
             'prob': pr,
-            'positive': tf.reduce_sum(-tf.log(tf.clip_by_value(pr, 1e-8, 1.0))),
-            'negative': tf.reduce_sum(-tf.log(tf.clip_by_value(1-pr, 1e-8, 1.0)))
+            'positive': -tf.log(tf.clip_by_value(pr, 1e-8, 1.0)),
+            'negative': -tf.log(tf.clip_by_value(1-pr, 1e-8, 1.0))
         }
         # return {
         #     'prob': fc,
@@ -487,24 +488,26 @@ class FullDiscriminator(Network):
 
  
 class FeatureExtractor(Network):
-    def __init__(self, name, channels=16, **kwargs):
+    def __init__(self, name, channels=16, depth=3, **kwargs):
         super().__init__(name, **kwargs)
         self.channels = channels
+        self.depth = depth
 
     def build(self, img):
         conv = []
         shapes = [img.shape.as_list()]
         shapes[0][-1] = self.channels
-        for i in range(3):
-            conv.append(convolveLeakyReLU('fconv%d' % i, conv[-1] if len(conv) else img, self.channels << i, 3, 2))
+        for i in range(self.depth):
+            conv.append(convolveLeakyReLU('fconv%d' % i, conv[-1] if len(conv) else img, self.channels << i, 3, 2, regularizer='L2'))
             shapes.append(conv[-1].shape.as_list())
         # print(shapes)
         concat = []
         deconv = []
-        for i in range(2, -1, -1):
+        for i in range(self.depth-1, -1, -1):
             concat.append(tf.concat([deconv[-1], conv[i]], axis=4) if len(deconv) else conv[i])
-            deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shapes[i][4], 4, 2, [128>>i]*3))
-        return deconv[-1]
+            deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shapes[i][4], 4, 2, [128>>i]*3, regularizer='L2'))
+        out = convolveLeakyReLU('conv_out', tf.concat([deconv[-1], img], axis=4), self.channels, 3)
+        return out
 
 
 class PartDiscriminator(Network):

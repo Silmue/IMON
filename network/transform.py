@@ -157,3 +157,60 @@ def free_form_fields(shape, control_fields, padding='same'):
     flow = tf.reshape(flow, [shape[2], -1, 3, shape[1], shape[0]])
     flow = tf.transpose(flow, [1, 4, 3, 0, 2])
     return flow
+
+
+
+from scipy.misc import imread, imresize, imsave
+
+
+def remap_histogram(image, style):
+    return tf.stack([_remap_histogram_level(image[:,:,i], style[:,:,i]) for i in range(3)], axis=-1)
+
+def get_hist_from_img(img):
+    img_linearized = tf.reshape(img, (-1,))
+    bincounts = tf.bincount(img_linearized, minlength=256)
+    bincounts = bincounts / img_linearized.get_shape()
+    return tf.cumsum(bincounts)
+
+def cond(i,j,a,b,x):
+    return tf.less(i,256)
+
+def body(i,j,a,b,x):
+    def false_fn(i,j,x):
+        x = tf.concat([x, tf.reshape(j, (1,))], 0)
+        i = tf.add(i,1)
+        return [i,j,x]
+    def true_fn(i,j,x):
+        j = tf.add(j, 1)
+        return [i,j,x]
+
+    i,j,x = tf.cond(tf.logical_and(tf.greater(a[i],b[j]), tf.less(j,255)), lambda: true_fn(i,j,x), lambda: false_fn(i,j,x))
+    return i,j,a,b,x
+
+def get_map_fn(mapping):
+    def map_fn(elem):
+        return tf.gather(mapping, elem)
+    return map_fn
+
+def _remap_histogram_level(image, style):
+    image = tf.cast(image, tf.int32)
+    style = tf.cast(style, tf.int32)
+
+    image_histogram = get_hist_from_img(image)
+    style_histogram = get_hist_from_img(style)
+
+
+    i = tf.constant(0)
+    j = tf.constant(0)
+    x = tf.constant([], dtype=tf.int32)
+
+    i,j,_,_,hist_mapping = tf.while_loop(
+            cond=cond, 
+            body=body, 
+            loop_vars=[i,j,image_histogram,style_histogram,x], 
+            shape_invariants=[i.get_shape(), j.get_shape(), image_histogram.get_shape(), style_histogram.get_shape(), tf.TensorShape([None,])]
+            )
+
+    remapped_img = tf.map_fn(get_map_fn(hist_mapping), tf.reshape(image, (-1,)))
+
+    return tf.reshape(remapped_img, image.get_shape())

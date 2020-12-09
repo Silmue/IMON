@@ -44,6 +44,7 @@ parser.add_argument('--n_pred', type=int, default=3)
 parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
 parser.add_argument('--discriminator', type=str, default='')
+parser.add_argument('--prestep', type=int, default=1)
 args = parser.parse_args()
 
 
@@ -181,7 +182,7 @@ def main():
 
         def get_lr(steps):
             m = args.lr / learningRates[0]
-            return m * learningRates[steps // iterationSize]
+            return m * learningRates[min(steps // iterationSize, len(learningRates)-1)]
 
         last_save_stamp = time.time()
 
@@ -211,7 +212,7 @@ def main():
                 #     pos_lr = lr * 100
                 # pos_lr = lr*0.2
                 # if pos_lr>0 and steps>1000:
-                #     _ = sess.run(framework.posOpt,
+                #     sess.run(framework.posOpt,
                 #                     set_tf_keys(fd, pos_learningRate=pos_lr))
 
                 # neg_prob = np.mean(sess.run([framework.predictions['neg_prob']],
@@ -226,14 +227,15 @@ def main():
                 #     neg_lr = 0
                 # neg_lr = lr*0.1
                 # if neg_lr>0:
-                #     _ = sess.run(framework.negOpt,
+                #     sess.run(framework.negOpt,
                 #                     set_tf_keys(fd, neg_learningRate=neg_lr))
-                _ = sess.run(framework.pairOpt,
-                    set_tf_keys(fd, pos_learningRate=lr*0.002))
+                if steps*2>=args.prestep:
+                    sess.run(framework.pairOpt,
+                        set_tf_keys(fd, pos_learningRate=lr))
 
                 # summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
                 summ, _ = sess.run([framework.summaryExtra, framework.dOpt],
-                               set_tf_keys(fd, learningRate=lr))
+                               set_tf_keys(fd, learningRate=lr, D_portion=0 if steps*2<args.prestep else min(1, steps/args.prestep-0.5)))
             else:
                 summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],
                                set_tf_keys(fd, learningRate=lr))
@@ -265,7 +267,7 @@ def main():
                                                                                              default_timer() - t0),
                                                                                          loss,
                                                                                          lr),
-                          end='\n')
+                          end='\n', flush=True)
 
                 if time.time() - last_save_stamp > 3600 or steps % iterationSize == iterationSize - 500:
                     last_save_stamp = time.time()
@@ -282,9 +284,10 @@ def main():
                             tf.Summary.Value(tag='val_' + k, simple_value=v) for k, v in metrics.items()
                         ])
                         summaryWriter.add_summary(val_summ, steps)
+                        print('Step {}, validation dice {}'.format(steps, metrics['dice_score']), flush=True)
                     except:
                         if steps == args.val_steps:
-                            print('Step {}, validation failed!'.format(steps))
+                            print('Step {}, validation failed!'.format(steps), flush=True)
     print('Finished.')
 
 
