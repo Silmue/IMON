@@ -155,17 +155,17 @@ class MultiGPUs:
                 net.controller = self
                 result = net(*[arg[i] for arg in args])
                 if D is not None:
-                    D_portion = tf.placeholder(tf.float32, [], 'D_portion')
+                    # D_portion = tf.placeholder(tf.float32, [], 'D_portion')
                     neg_result = D(result['image_reconstruct'], result['image_fixed'])
                     pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
                     result['D_raw_loss'] = neg_result['positive']
-                    result['D_loss'] = (result['0_loss']+result['1_reg_loss']+result['D_raw_loss']/10)*D_portion +  result['loss']*(1-D_portion)
+                    result['D_loss'] = result['0_loss']+result['1_reg_loss'] + result['D_raw_loss']
                     result['D_loss_pos'] = pos_result['positive']
                     result['D_loss_neg'] = neg_result['negative']
                     result['neg_prob'] = neg_result['prob']
                     result['pos_prob'] = pos_result['prob']
-                    # result['Pair_loss'] = tf.clip_by_value(result['D_loss_pos']-result['D_loss_neg'], -1, 0)
-                    result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
+                    result['Pair_loss'] = tf.clip_by_value(result['D_loss_pos']+result['D_loss_neg'], -1, 0)
+                    # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
             
                 results.append(result)
@@ -173,10 +173,10 @@ class MultiGPUs:
                     if D is not None:
                         dgrads.append(opt.compute_gradients(
                             result['D_loss'], var_list=net.trainable_variables))
-                        posgrads.append(popt.compute_gradients(
-                            result['D_loss_pos'], var_list=D.trainable_variables))
-                        neggrads.append(nopt.compute_gradients(
-                            result['D_loss_neg'], var_list=D.trainable_variables))
+                        # posgrads.append(popt.compute_gradients(
+                        #     result['D_loss_pos'], var_list=D.trainable_variables))
+                        # neggrads.append(nopt.compute_gradients(
+                        #     result['D_loss_neg'], var_list=D.trainable_variables))
                         pairgrads.append(popt.compute_gradients(
                             result['Pair_loss'], var_list=D.trainable_variables))
                     grads.append(opt.compute_gradients(
@@ -193,15 +193,29 @@ class MultiGPUs:
                         [result[k] for result in results], axis=0)
 
             if grads:
-                op = opt.apply_gradients(self.average_gradients(grads))
-                if D is None:
-                    return concat_result, op
-                else:
-                    dop = opt.apply_gradients(self.average_gradients(dgrads))
-                    posop = popt.apply_gradients(self.average_gradients(posgrads))
-                    negop = nopt.apply_gradients(self.average_gradients(neggrads))
-                    pairop = popt.apply_gradients(self.average_gradients(pairgrads))
-                    return concat_result, op, dop, posop, negop, pairop
+                # op = opt.apply_gradients(self.average_gradients(grads))
+                O = {}
+                G = {}
+                V = {}
+
+                def grads_cache(opt, _g):
+                    _g = self.average_gradients(_g)
+                    gradsholder = [(tf.placeholder(tf.float32, shape=g.get_shape()), v)
+                        for (g, v) in _g if g is not None]
+                    _o = opt.apply_gradients(gradsholder)
+                    return _o, [g for (g, v) in _g if g is not None], [k for (k, v) in gradsholder]
+
+                O['R'], G['R'], V['R'] = grads_cache(opt, grads)
+                if D is not None:
+                    # dop = opt.apply_gradients(self.average_gradients(dgrads))
+                    # posop = popt.apply_gradients(self.average_gradients(posgrads))
+                    # negop = nopt.apply_gradients(self.average_gradients(neggrads))
+                    # pairop = popt.apply_gradients(self.average_gradients(pairgrads))
+                    O['RD'], G['RD'], V['RD'] = grads_cache(opt, dgrads)
+                    # O['P'], G['P'] = grads_cache(popt, posgrads)
+                    # O['N'], G['N'] = grads_cache(nopt, negop)
+                    O['T'], G['T'], V['T'] = grads_cache(popt, pairgrads)
+                return concat_result, O, G, V
             else:
                 return concat_result
 
@@ -220,7 +234,8 @@ class MultiGPUs:
         for grad_list in zip(*grads):
             grad, var = grad_list[0]
             if grad is None:
-                ret.append((None, var))
+                # ret.append((None, var))
+                pass
             else:
                 print(var, var.device)
                 ret.append(

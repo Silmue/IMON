@@ -37,14 +37,14 @@ class RecursiveCascadedNetworks(Network):
                  base_network, n_cascades, rep=1,
                  det_factor=0.1, ortho_factor=0.1, reg_factor=1.0,
                  extra_losses={}, warp_gradient=True,
-                 fast_reconstruction=False, warp_padding=False, ipmethod=0, n_pred=3, depth = 5,
+                 fast_reconstruction=False, warp_padding=False, n_pred=3, depth = 5, nccwin=None, loss='NCC',
                  **kwargs):
         super().__init__(name)
         self.det_factor = det_factor
         self.ortho_factor = ortho_factor
         self.reg_factor = reg_factor
         self.base_network = eval(base_network)
-        if base_network in ['Siamese', 'SiameseLink']:
+        if base_network.find('Siamese')>-1:
             self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
                 [(self.base_network("deform_stem_" + str(i),
                                     flow_multiplier=1.0 / n_cascades, n_pred=n_pred, depth=depth), {'raw_weight': 0})] * rep
@@ -69,7 +69,10 @@ class RecursiveCascadedNetworks(Network):
         self.reconstruction = Fast3DTransformer(
             warp_padding) if fast_reconstruction else Dense3DSpatialTransformer(warp_padding)
         self.trilinear_sampler = TrilinearSampler()
-        self.similarity_loss = NCC()
+        if loss=='NCC':
+            self.similarity_loss = NCC(nccwin)
+        else:
+            self.similarity_loss = self.CC
 
     @property
     def trainable_variables(self):
@@ -232,26 +235,25 @@ class RecursiveCascadedNetworks(Network):
         return tf.sqrt(var)
 
 
+    def CC(self, img1, warped_img2):
+        sizes = np.prod(img1.shape.as_list()[1:])
+        flatten1 = tf.reshape(img1, [-1, sizes])
+        flatten2 = tf.reshape(warped_img2, [-1, sizes])
 
-def CC(self, img1, warped_img2):
-    sizes = np.prod(img1.shape.as_list()[1:])
-    flatten1 = tf.reshape(img1, [-1, sizes])
-    flatten2 = tf.reshape(warped_img2, [-1, sizes])
+        if self.fast_reconstruction:
+            _, pearson_r, _ = tf.user_ops.linear_similarity(flatten1, flatten2)
+        else:
+            mean1 = tf.reduce_mean(flatten1, axis=-1, keepdims=True)
+            mean2 = tf.reduce_mean(flatten2, axis=-1, keepdims=True)
+            var1 = tf.reduce_mean(tf.square(flatten1 - mean1), axis=-1)
+            var2 = tf.reduce_mean(tf.square(flatten2 - mean2), axis=-1)
+            cov12 = tf.reduce_mean(
+                (flatten1 - mean1) * (flatten2 - mean2), axis=-1)
+            pearson_r = cov12 / tf.sqrt((var1 + 1e-6) * (var2 + 1e-6))
 
-    if self.fast_reconstruction:
-        _, pearson_r, _ = tf.user_ops.linear_similarity(flatten1, flatten2)
-    else:
-        mean1 = tf.reduce_mean(flatten1, axis=-1, keepdims=True)
-        mean2 = tf.reduce_mean(flatten2, axis=-1, keepdims=True)
-        var1 = tf.reduce_mean(tf.square(flatten1 - mean1), axis=-1)
-        var2 = tf.reduce_mean(tf.square(flatten2 - mean2), axis=-1)
-        cov12 = tf.reduce_mean(
-            (flatten1 - mean1) * (flatten2 - mean2), axis=-1)
-        pearson_r = cov12 / tf.sqrt((var1 + 1e-6) * (var2 + 1e-6))
-
-    raw_loss = 1 - pearson_r
-    raw_loss = tf.reduce_sum(raw_loss)
-    return raw_loss
+        raw_loss = 1 - pearson_r
+        raw_loss = tf.reduce_sum(raw_loss)
+        return raw_loss
 
 class NCC:
     """
@@ -271,6 +273,8 @@ class NCC:
         # set window size
         if self.win is None:
             self.win = [9] * ndims
+        if type(self.win) is int:
+            self.win = [self.win] * ndims
 
         # get convolution function
         conv_fn = getattr(tf.nn, 'conv%dd' % ndims)

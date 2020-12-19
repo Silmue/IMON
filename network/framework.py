@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import tflearn
+from timeit import default_timer
 
 from . import transform
 from .utils import MultiGPUs
@@ -106,12 +107,9 @@ class FrameworkUnsupervised:
             if validation:
                 self.predictions = gpus(self.network, net_pls)
             else:
-                if self.discriminator:
-                    self.predictions, self.adamOpt, self.dOpt, self.posOpt, self.negOpt, self.pairOpt = gpus(
-                    self.network, net_pls, self.discriminator, opt=adamOptimizer, popt=posOptimizer, nopt=negOptimizer)
-                else:
-                    self.predictions, self.adamOpt = gpus(
-                    self.network, net_pls, opt=adamOptimizer)
+                self.predictions, self.O, self.G, self.V = gpus(
+                self.network, net_pls, self.discriminator, opt=adamOptimizer, popt=posOptimizer, nopt=negOptimizer)
+
         self.build_summary(self.predictions)
 
     @property
@@ -160,6 +158,7 @@ class FrameworkUnsupervised:
             #     for k in self.segmentation_class_value:
             #         keys.append('jacc_{}'.format(k))
         full_results = dict([(k, list()) for k in keys])
+        # full_results['time'] = []
         if not summary:
             full_results['id1'] = []
             full_results['id2'] = []
@@ -176,8 +175,11 @@ class FrameworkUnsupervised:
             cnt -= 1
             id1 = fd.pop('id1')
             id2 = fd.pop('id2')
+            # t0 = default_timer()
             results = sess.run(self.get_predictions(
                 *keys), feed_dict=set_tf_keys(fd))
+            # t1 = default_timer()
+            # full_results['time'].append(t1-t0)
             if not summary:
                 results['id1'] = id1
                 results['id2'] = id2

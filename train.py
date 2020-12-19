@@ -26,13 +26,15 @@ parser.add_argument('-d', '--dataset', type=str, default="datasets/brain.json",
                     help='Specifies a data config')
 parser.add_argument('--batch', type=int, default=1,
                     help='Number of image pairs per batch') 
+parser.add_argument('--fake_batch', type=int, default=1,
+                    help='Number of image pairs per batch by gradient accmulate') 
 parser.add_argument('--round', type=int, default=20000,
                     help='Number of batches per epoch')
 parser.add_argument('--epochs', type=float, default=5,
                     help='Number of epochs')
 parser.add_argument('--fast_reconstruction', action='store_true')
 parser.add_argument('--debug', action='store_true')
-parser.add_argument('--val_steps', type=int, default=500)
+parser.add_argument('--val_steps', type=int, default=100)
 parser.add_argument('--net_args', type=str, default='')
 parser.add_argument('--data_args', type=str, default='')
 parser.add_argument('--lr', type=float, default=1e-4)
@@ -44,7 +46,9 @@ parser.add_argument('--n_pred', type=int, default=3)
 parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
 parser.add_argument('--discriminator', type=str, default='')
-parser.add_argument('--prestep', type=int, default=1)
+parser.add_argument('--prestep', type=int, default=5000)
+parser.add_argument('--loss', type=str, default='NCC')
+parser.add_argument('--nccwin', type=int, default=9)
 args = parser.parse_args()
 
 
@@ -77,6 +81,8 @@ def main():
     Framework.net_args['n_pred'] = args.n_pred
     Framework.net_args['depth'] = args.depth
     Framework.net_args['ipmethod'] = args.ipmethod
+    Framework.net_args['nccwin'] = args.nccwin
+    Framework.net_args['loss'] = args.loss
     Framework.net_args.update(eval('dict({})'.format(args.net_args)))
     with open(os.path.join(args.dataset), 'r') as f:
         cfg = json.load(f)
@@ -89,7 +95,7 @@ def main():
     # load training set and validation set
 
     def set_tf_keys(feed_dict, **kwargs):
-        ret = dict([(k + ':0', v) for k, v in feed_dict.items()])
+        ret = dict([(k + ':0', v) if type(k)==str else (k,v) for k, v in feed_dict.items()])
         ret.update([(k + ':0', v) for k, v in kwargs.items()])
         return ret
 
@@ -186,59 +192,72 @@ def main():
 
         last_save_stamp = time.time()
 
+        def average_gradients(grads, var):
+            ret = {}
+            # for grad_list in zip(*grads):
+            #     grad, var = grad_list[0]
+            #     if grad is not None:
+            #         ret.append(
+            #             (sum([grad for grad, _ in grad_list]) / len(grad_list), var))
+            for i in range(len(var)):
+                ret[var[i]] = sum([grad[i] for grad in grads])
+            return ret
+
+        def update_step(k, summopt=None, **kwargs):
+            opt = framework.O[k]
+            grad = framework.G[k]
+            var = framework.V[k]
+            t1 = 0
+            grads = []
+            summ = None
+            for i in range(args.fake_batch):
+                t0 = default_timer()
+                fd = next(generator)
+                fd.pop('mask', [])
+                fd.pop('id1', [])
+                fd.pop('id2', [])
+                t1 += default_timer()-t0
+                if summopt is not None and i==0:
+                    summ, _g = sess.run([summopt, grad], set_tf_keys(fd))
+                else:
+                    _g = sess.run(grad, set_tf_keys(fd))
+                grads.append(_g)
+
+            grads_mean = average_gradients(grads, var)
+            _ = sess.run(opt, set_tf_keys(grads_mean, **kwargs))
+            return summ, t1
+
+
+        print("start train, batch_size={}(fake_batch={})".format(args.batch*args.fake_batch, args.fake_batch))
         while True:
             if hasattr(framework, 'get_lr'):
                 lr = framework.get_lr(steps, batchSize)
             else:
                 lr = get_lr(steps)
             t0 = default_timer()
-            fd = next(generator)
-            fd.pop('mask', [])
-            fd.pop('id1', [])
-            fd.pop('id2', [])
-            t1 = default_timer()
+            data_time = 0
+            # fd = next(generator)
+            # fd.pop('mask', [])
+            # fd.pop('id1', [])
+            # fd.pop('id2', [])
+            # t1 = default_timer()
             tflearn.is_training(True, session=sess)
             
             if framework.discriminator:
-                # pos_prob = np.mean(sess.run([framework.predictions['pos_prob']],
-                #                set_tf_keys(fd)))
-                # if pos_prob>0.75:
-                #     pos_lr = 0
-                # elif pos_prob>0.5:
-                #     pos_lr = lr 
-                # elif pos_prob>0.25:
-                #     pos_lr = lr * 10
-                # else:
-                #     pos_lr = lr * 100
-                # pos_lr = lr*0.2
-                # if pos_lr>0 and steps>1000:
-                #     sess.run(framework.posOpt,
-                #                     set_tf_keys(fd, pos_learningRate=pos_lr))
-
-                # neg_prob = np.mean(sess.run([framework.predictions['neg_prob']],
-                #                set_tf_keys(fd)))
-                # if neg_prob>0.75:
-                #     neg_lr = lr * 100
-                # elif neg_prob>0.5:
-                #     neg_lr = lr * 10
-                # elif neg_prob>0.25:
-                #     neg_lr = lr
-                # else:
-                #     neg_lr = 0
-                # neg_lr = lr*0.1
-                # if neg_lr>0:
-                #     sess.run(framework.negOpt,
-                #                     set_tf_keys(fd, neg_learningRate=neg_lr))
-                if steps*2>=args.prestep:
-                    sess.run(framework.pairOpt,
-                        set_tf_keys(fd, pos_learningRate=lr))
-
-                # summ, _ = sess.run([framework.summaryExtra, framework.dOpt if steps>1000 else framework.adamOpt],
-                summ, _ = sess.run([framework.summaryExtra, framework.dOpt],
-                               set_tf_keys(fd, learningRate=lr, D_portion=0 if steps*2<args.prestep else min(1, steps/args.prestep-0.5)))
+                _, t1 = update_step('T', pos_learningRate=lr)
+                data_time += t1
+                if steps<args.pre_step:
+                    if steps>args.pre_step//2:
+                        _, t1 = update_step('T', pos_learningRate=lr)
+                        data_time += t1
+                    summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
+                else:
+                    summ, t1 = update_step('RD', summopt=framework.summaryExtra, learningRate=lr)
+                data_time += t1
             else:
-                summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],
-                               set_tf_keys(fd, learningRate=lr))
+                summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
+                data_time += t1
+
 
             for v in tf.Summary().FromString(summ).value:
                 if v.tag == 'loss':
@@ -263,7 +282,7 @@ def main():
                           time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
                           'Steps %d, Total time %.2f, data %.2f%%. Loss %.3e lr %.3e' % (steps,
                                                                                          default_timer() - t0,
-                                                                                         (t1 - t0) / (
+                                                                                         data_time/ (
                                                                                              default_timer() - t0),
                                                                                          loss,
                                                                                          lr),

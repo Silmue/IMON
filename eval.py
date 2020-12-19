@@ -122,8 +122,10 @@ def main():
                 print(results['id1'][i], results['id2'][i], np.mean(results['dices'][i]), np.mean(results['jaccs'][i]), np.mean(
                     results['landmark_dists'][i]), results['jacobian_det'][i], file=fo)
             print('Summary', file=fo)
-            jaccs, dices, landmarks = results['jaccs'], results['dices'], results['landmark_dists']
+            times, jaccs, dices, landmarks = results['time'], results['jaccs'], results['dices'], results['landmark_dists']
             jacobian_det = results['jacobian_det']
+            print("Inference time: {} ({})".format(np.mean(times), np.std(
+                np.mean(times, axis=-1))), file=fo)
             print("Dice score: {} ({})".format(np.mean(dices), np.std(
                 np.mean(dices, axis=-1))), file=fo)
             print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(

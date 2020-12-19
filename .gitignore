@@ -13,6 +13,8 @@
 *.exp
 view*
 .ipynb_checkpoints/
+*.sh
+test.py
 # User-specific files
 *.suo
 *.user
