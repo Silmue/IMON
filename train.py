@@ -46,7 +46,7 @@ parser.add_argument('--n_pred', type=int, default=3)
 parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
 parser.add_argument('--discriminator', type=str, default='')
-parser.add_argument('--prestep', type=int, default=5000)
+parser.add_argument('--pre_step', type=int, default=10000)
 parser.add_argument('--loss', type=str, default='NCC')
 parser.add_argument('--nccwin', type=int, default=9)
 args = parser.parse_args()
@@ -244,12 +244,10 @@ def main():
             tflearn.is_training(True, session=sess)
             
             if framework.discriminator:
-                _, t1 = update_step('T', pos_learningRate=lr)
-                data_time += t1
+                if 2*steps>args.pre_step:
+                    _, t1 = update_step('T', pos_learningRate=lr)
+                    data_time += t1
                 if steps<args.pre_step:
-                    if steps>args.pre_step//2:
-                        _, t1 = update_step('T', pos_learningRate=lr)
-                        data_time += t1
                     summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
                 else:
                     summ, t1 = update_step('RD', summopt=framework.summaryExtra, learningRate=lr)
