@@ -49,6 +49,7 @@ parser.add_argument('--discriminator', type=str, default='')
 parser.add_argument('--pre_step', type=int, default=10000)
 parser.add_argument('--loss', type=str, default='NCC')
 parser.add_argument('--nccwin', type=int, default=9)
+parser.add_argument('--loadmode', type=int, default=1)
 args = parser.parse_args()
 
 
@@ -118,12 +119,16 @@ def main():
 
             tf.global_variables_initializer().run()
             checkpoints = args.checkpoint.split(';')
+            var = tf.global_variables()
+            Rvar = [val for val in var if 'frm' in val.name]
+            Dvar = [val for val in var if 'frm' not in val.name]
+            varlist = Rvar if args.loadmode==1 else (Dvar if args.loadmode==2 else var)
             if args.clear_steps:
                 steps = 0
             else:
                 steps = int(re.search('model-(\d+)', checkpoints[0]).group(1))
             for cp in checkpoints:
-                saver = tf.train.Saver()
+                saver = tf.train.Saver(varlist)
                 saver.restore(sess, cp)
 
         data_args = eval('dict({})'.format(args.data_args))
@@ -293,6 +298,7 @@ def main():
 
                 if args.debug or steps % args.val_steps == 0:
                     try:
+                        t0 = default_timer()
                         val_gen = dataset.generator(
                             Split.VALID, loop=False, batch_size=batchSize)
                         metrics = framework.validate(
@@ -301,7 +307,7 @@ def main():
                             tf.Summary.Value(tag='val_' + k, simple_value=v) for k, v in metrics.items()
                         ])
                         summaryWriter.add_summary(val_summ, steps)
-                        print('Step {}, validation dice {}'.format(steps, metrics['dice_score']), flush=True)
+                        print('Step {}, validation dice {}, validation time {}'.format(steps, metrics['dice_score'], default_timer()-t0), flush=True)
                     except:
                         if steps == args.val_steps:
                             print('Step {}, validation failed!'.format(steps), flush=True)
