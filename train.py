@@ -47,11 +47,11 @@ parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
 parser.add_argument('--discriminator', type=str, default='')
 parser.add_argument('--pre_step', type=int, default=10000)
+parser.add_argument('--D_step', type=int, default=None)
 parser.add_argument('--loss', type=str, default='NCC')
 parser.add_argument('--nccwin', type=int, default=9)
 parser.add_argument('--loadmode', type=int, default=1)
 args = parser.parse_args()
-
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
@@ -247,9 +247,9 @@ def main():
             # fd.pop('id2', [])
             # t1 = default_timer()
             tflearn.is_training(True, session=sess)
-            
+            D_step = args.D_step if args.D_step is not None else args.pre_step//2
             if framework.discriminator:
-                if 2*steps>args.pre_step:
+                if steps>=D_step:
                     _, t1 = update_step('T', pos_learningRate=lr)
                     data_time += t1
                 if steps<args.pre_step:
