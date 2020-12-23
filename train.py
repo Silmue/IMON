@@ -304,7 +304,7 @@ def main():
                                                                                          loss,
                                                                                          lr,
                                                                                          Dloss),
-                          , end='\n', flush=True)
+                          end='\n', flush=True)
 
                 if time.time() - last_save_stamp > 3600 or steps % iterationSize == iterationSize - 500:
                     last_save_stamp = time.time()
