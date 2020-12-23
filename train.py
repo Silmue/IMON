@@ -257,7 +257,7 @@ def main():
                             for v in tf.Summary().FromString(Dsumm).value:
                                 if v.tag == 'Triplet_loss':
                                     Dloss = v.simple_value
-                            if Dloss<=1e-5:
+                            if Dloss<=-10+1e-5:
                                 zerocnt += 1
                                 if zerocnt>=10: 
                                     print("early stop at D step:{}".format(i))
