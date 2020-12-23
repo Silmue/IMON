@@ -159,13 +159,15 @@ class MultiGPUs:
                     margin = 100
                     neg_result = D(result['image_reconstruct'], result['image_fixed'])
                     pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
-                    result['D_raw_loss'] = neg_result['positive']
-                    result['D_loss'] = result['0_loss']+result['1_reg_loss'] + result['D_raw_loss']
+                    result['RD_raw_loss'] = neg_result['positive']
+                    result['RD_reg_loss'] = result['0_loss'] + result['1_reg_loss'] 
+                    result['RD_loss'] = result['D_raw_loss'] + result['RD_reg_loss']
                     result['D_loss_pos'] = pos_result['positive']
                     result['D_loss_neg'] = neg_result['negative']
-                    result['neg_prob'] = neg_result['prob']
-                    result['pos_prob'] = pos_result['prob']
-                    result['Pair_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0) / margin
+
+                    result['Triplet_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0) / margin
+                    result['D_reg_loss'] = D.l2_regularizer
+                    result['D_loss'] = result['Triplet_loss'] + result['D_reg_loss']
                     # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
             
@@ -173,13 +175,13 @@ class MultiGPUs:
                 if opt is not None:
                     if D is not None:
                         dgrads.append(opt.compute_gradients(
-                            result['D_loss'], var_list=net.trainable_variables))
+                            result['RD_loss'], var_list=net.trainable_variables))
                         # posgrads.append(popt.compute_gradients(
                         #     result['D_loss_pos'], var_list=D.trainable_variables))
                         # neggrads.append(nopt.compute_gradients(
                         #     result['D_loss_neg'], var_list=D.trainable_variables))
                         pairgrads.append(popt.compute_gradients(
-                            result['Pair_loss'], var_list=D.trainable_variables))
+                            result['D_loss'], var_list=D.trainable_variables))
                     grads.append(opt.compute_gradients(
                         result['loss'], var_list=net.trainable_variables))
 

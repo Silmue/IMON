@@ -275,9 +275,11 @@ def main():
 
             Dloss = -1
             for v in tf.Summary().FromString(summ).value:
-                if v.tag == 'loss':
+                if args.discriminator is None or steps<args.D_step and v.tag == 'loss':
                     loss = v.simple_value
-                if v.tag == 'Pair_loss':
+                if args.discriminator and steps>=args.D_step and v.tag == 'RD_loss':
+                    loss = v.simple_value
+                if v.tag == 'Triplet_loss':
                     Dloss = v.simple_value
 
             steps += 1
