@@ -254,7 +254,7 @@ def main():
                             Dt0 = default_timer()
                             Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
                             if (i%500==0):
-                                for v in tf.Summary().FromString(summ).value:
+                                for v in tf.Summary().FromString(Dsumm).value:
                                     if v.tag == 'Pair_loss':
                                         Dloss = v.simple_value
                                 print('*%s* ' % run_id,
@@ -265,7 +265,7 @@ def main():
                                                                                                     lr),
                                     end='\n', flush=True)
                             
-                    Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
+                    _, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
                     data_time += t1
                     summ, t1 = update_step('RD', summopt=framework.summaryExtra, learningRate=lr)
                 data_time += t1
@@ -273,7 +273,7 @@ def main():
                 summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
                 data_time += t1
 
-
+            Dloss = -1
             for v in tf.Summary().FromString(summ).value:
                 if v.tag == 'loss':
                     loss = v.simple_value
@@ -297,13 +297,14 @@ def main():
                 if steps < 500 or steps % 500 == 0 and not args.debug:
                     print('*%s* ' % run_id,
                           time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-                          'Steps %d, Total time %.2f, data %.2f%%. Loss %.3e lr %.3e' % (steps,
+                          'Steps %d, Total time %.2f, data %.2f%%. Loss %.3e lr %.3e DLoss %.3e' % (steps,
                                                                                          default_timer() - t0,
                                                                                          data_time/ (
                                                                                              default_timer() - t0),
                                                                                          loss,
-                                                                                         lr),
-                          end='\n', flush=True)
+                                                                                         lr,
+                                                                                         Dloss),
+                          , end='\n', flush=True)
 
                 if time.time() - last_save_stamp > 3600 or steps % iterationSize == iterationSize - 500:
                     last_save_stamp = time.time()
