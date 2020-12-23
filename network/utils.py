@@ -165,7 +165,7 @@ class MultiGPUs:
                     result['D_loss_neg'] = neg_result['negative']
                     result['neg_prob'] = neg_result['prob']
                     result['pos_prob'] = pos_result['prob']
-                    result['Pair_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0)
+                    result['Pair_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0) / margin
                     # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
             

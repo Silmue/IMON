@@ -576,7 +576,7 @@ class FeatureExtractor(Network):
         for i in range(self.depth-1, -1, -1):
             concat.append(tf.concat([deconv[-1], conv[i]], axis=4) if len(deconv) else conv[i])
             deconv.append(upconvolveLeakyReLU('fdeconv%d' % i, concat[-1], shapes[i][4], 4, 2, [128>>i]*3, regularizer='L2'))
-        out = convolveLeakyReLU('conv_out', tf.concat([deconv[-1], img], axis=4), self.channels, 3)
+        out = convolveLeakyReLU('conv_out', tf.concat([deconv[-1], img], axis=4), self.channels, 3, regularizer='L2')
         return out
 
 

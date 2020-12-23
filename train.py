@@ -253,7 +253,7 @@ def main():
                         for i in range(args.pre_step):
                             Dt0 = default_timer()
                             Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
-                            if (i%500==0):
+                            if (i<500 and i%10==0) or i%500==0:
                                 for v in tf.Summary().FromString(Dsumm).value:
                                     if v.tag == 'Pair_loss':
                                         Dloss = v.simple_value
