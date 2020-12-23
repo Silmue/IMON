@@ -249,17 +249,23 @@ def main():
                     summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
                 else:
                     if steps==D_step:
+                        zerocnt = 0
                         print("pre train D for {} steps".format(args.pre_step))
                         for i in range(args.pre_step):
                             Dt0 = default_timer()
                             Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
+                            for v in tf.Summary().FromString(Dsumm).value:
+                                if v.tag == 'Triplet_loss':
+                                    Dloss = v.simple_value
+                            if Dloss<=1e-5:
+                                zerocnt += 1
+                                if zerocnt>=10: 
+                                    print("early stop at D step:{}".format(i))
+                                    break
                             if (i<500 and i%10==0) or i%500==0:
-                                for v in tf.Summary().FromString(Dsumm).value:
-                                    if v.tag == 'Pair_loss':
-                                        Dloss = v.simple_value
                                 print('*%s* ' % run_id,
                                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-                                    'D train Steps %d, Total time %.2f, DLoss %.3e lr %.3e' % (i,
+                                    'D train Steps %d, Total time %.2f, DLoss %.2f lr %.3e' % (i,
                                                                                                     default_timer() - Dt0,
                                                                                                     Dloss,
                                                                                                     lr),
