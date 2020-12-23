@@ -167,6 +167,7 @@ class MultiGPUs:
 
                     result['Triplet_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0)
                     result['D_reg_loss'] = D.l2_regularizer
+                    
                     result['D_loss'] = result['Triplet_loss'] + result['D_reg_loss']
                     # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
