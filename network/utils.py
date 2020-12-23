@@ -156,6 +156,7 @@ class MultiGPUs:
                 result = net(*[arg[i] for arg in args])
                 if D is not None:
                     # D_portion = tf.placeholder(tf.float32, [], 'D_portion')
+                    margin = 100
                     neg_result = D(result['image_reconstruct'], result['image_fixed'])
                     pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
                     result['D_raw_loss'] = neg_result['positive']
@@ -164,7 +165,7 @@ class MultiGPUs:
                     result['D_loss_neg'] = neg_result['negative']
                     result['neg_prob'] = neg_result['prob']
                     result['pos_prob'] = pos_result['prob']
-                    result['Pair_loss'] = tf.clip_by_value(result['D_loss_pos']+result['D_loss_neg'], -1, 0)
+                    result['Pair_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg']+margin, 0)
                     # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
             

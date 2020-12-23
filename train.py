@@ -241,20 +241,32 @@ def main():
                 lr = get_lr(steps)
             t0 = default_timer()
             data_time = 0
-            # fd = next(generator)
-            # fd.pop('mask', [])
-            # fd.pop('id1', [])
-            # fd.pop('id2', [])
-            # t1 = default_timer()
             tflearn.is_training(True, session=sess)
+
             D_step = args.D_step if args.D_step is not None else args.pre_step//2
             if framework.discriminator:
-                if steps>=D_step:
-                    _, t1 = update_step('T', pos_learningRate=lr)
-                    data_time += t1
-                if steps<args.pre_step:
+                if steps<D_step:
                     summ, t1 = update_step('R', summopt=framework.summaryExtra, learningRate=lr)
                 else:
+                    if steps==D_step:
+                        print("pre train D for {} steps".format(args.pre_step))
+                        for i in range(args.pre_step):
+                            Dt0 = default_timer()
+                            Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
+                            if (i%500==0):
+                                for v in tf.Summary().FromString(summ).value:
+                                    if v.tag == 'Pair_loss':
+                                        Dloss = v.simple_value
+                                print('*%s* ' % run_id,
+                                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+                                    'D train Steps %d, Total time %.2f, DLoss %.3e lr %.3e' % (i,
+                                                                                                    default_timer() - Dt0,
+                                                                                                    Dloss,
+                                                                                                    lr),
+                                    end='\n', flush=True)
+                            
+                    Dsumm, t1 = update_step('T', summopt=framework.summaryExtra, pos_learningRate=lr)
+                    data_time += t1
                     summ, t1 = update_step('RD', summopt=framework.summaryExtra, learningRate=lr)
                 data_time += t1
             else:
@@ -265,6 +277,8 @@ def main():
             for v in tf.Summary().FromString(summ).value:
                 if v.tag == 'loss':
                     loss = v.simple_value
+                if v.tag == 'Pair_loss':
+                    Dloss = v.simple_value
 
             steps += 1
             if args.debug or steps % 10 == 0:
