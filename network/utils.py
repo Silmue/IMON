@@ -161,7 +161,7 @@ class MultiGPUs:
                     pos_result = D(result['image_reconstruct']*0.1+result['image_fixed']*0.9, result['image_fixed'])
                     result['RD_raw_loss'] = neg_result['positive']
                     result['RD_reg_loss'] = result['0_loss'] + result['1_reg_loss'] 
-                    result['RD_loss'] = result['D_raw_loss'] + result['RD_reg_loss']
+                    result['RD_loss'] = result['RD_raw_loss'] + result['RD_reg_loss']
                     result['D_loss_pos'] = pos_result['positive']
                     result['D_loss_neg'] = neg_result['negative']
 
