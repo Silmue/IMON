@@ -591,7 +591,7 @@ class PartDiscriminator(Network):
         return self.feature.trainable_variables
 
     @property
-    def l2_regularizer(self, decay=0.2):
+    def l2_regularizer(self, decay=0.1):
         return decay * tf.add_n([tf.nn.l2_loss(tf.cast(v, tf.float32)) for v in self.trainable_variables if 'b:0' not in v.name])
 
     def build(self, img1, img2):

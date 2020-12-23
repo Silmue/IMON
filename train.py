@@ -265,7 +265,7 @@ def main():
                             if (i<500 and i%10==0) or i%500==0:
                                 print('*%s* ' % run_id,
                                     time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
-                                    'D train Steps %d, Total time %.2f, DLoss %.2f lr %.3e' % (i,
+                                    'D train Steps %d, Total time %.2f, DLoss %.3e lr %.3e' % (i,
                                                                                                     default_timer() - Dt0,
                                                                                                     Dloss,
                                                                                                     lr),
