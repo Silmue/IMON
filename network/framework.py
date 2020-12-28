@@ -137,7 +137,7 @@ class FrameworkUnsupervised:
             self.summaryExtra = self.summaryOp
 
     def get_predictions(self, *keys):
-        return dict([(k, self.predictions[k]) for k in keys])
+        return dict([(k, self.predictions[k]) for k in keys if k in self.predictions.keys()])
 
     def validate_clean(self, sess, generator, keys=None):
         for fd in generator:
@@ -146,19 +146,20 @@ class FrameworkUnsupervised:
             _ = sess.run(self.get_predictions(*keys),
                          feed_dict=set_tf_keys(fd))
 
-    def validate(self, sess, generator, keys=None, summary=False, predict=False):
+    def validate(self, sess, generator, keys=None, summary=False, predict=False, cnt = 10000):
         if keys is None:
             keys = ['dice_score', 'landmark_dist', 'pt_mask', 'jacc_score']
             if predict:
                 keys.append('real_flow')
                 keys.append('warped_moving')
                 keys.append('warped_seg_moving')
-                keys.append('flow_inc')
+                keys.append('flow_1')
+                keys.append('flow_inc_1')
             # if self.segmentation_class_value is not None:
             #     for k in self.segmentation_class_value:
             #         keys.append('jacc_{}'.format(k))
         full_results = dict([(k, list()) for k in keys])
-        # full_results['time'] = []
+        full_results['time'] = []
         if not summary:
             full_results['id1'] = []
             full_results['id2'] = []
@@ -168,18 +169,18 @@ class FrameworkUnsupervised:
                 full_results['img1'] = []
                 full_results['img2'] = []
         tflearn.is_training(False, sess)
-        cnt = 5
         for fd in generator:
             if cnt==0 and predict:
                 break
             cnt -= 1
             id1 = fd.pop('id1')
             id2 = fd.pop('id2')
-            # t0 = default_timer()
+            t0 = default_timer()
+            # sess.run(self.predictions['real_flow'],feed_dict=set_tf_keys(fd))
+            t1 = default_timer()
             results = sess.run(self.get_predictions(
                 *keys), feed_dict=set_tf_keys(fd))
-            # t1 = default_timer()
-            # full_results['time'].append(t1-t0)
+            full_results['time'].append([t1-t0])
             if not summary:
                 results['id1'] = id1
                 results['id2'] = id2
@@ -196,6 +197,8 @@ class FrameworkUnsupervised:
             full_results['landmark_dist'] = [arr * mask for arr,
                                              mask in zip(full_results['landmark_dist'], pt_mask)]
         for k in full_results:
+            if len(full_results[k])==0:
+                continue
             full_results[k] = np.concatenate(full_results[k], axis=0)
             if summary:
                 full_results[k] = full_results[k].mean()

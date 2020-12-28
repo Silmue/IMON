@@ -14,15 +14,16 @@ parser.add_argument('-g', '--gpu', type=str, default='0',
 parser.add_argument('-d', '--dataset', type=str, default=None,
                     help='Specifies a data config')
 parser.add_argument('-v', '--val_subset', type=str, default=None)
-parser.add_argument('--batch', type=int, default=4, help='Size of minibatch')
+parser.add_argument('--batch', type=int, default=1, help='Size of minibatch')
 parser.add_argument('--fast_reconstruction', action='store_true')
 parser.add_argument('--paired', action='store_true')
 parser.add_argument('--data_args', type=str, default=None)
 parser.add_argument('--net_args', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
-#parser.add_argument('--n_pred', type=int, default=4)
-#parser.add_argument('--ipmethod', type=int, default=0)
-parser.add_argument('--save_image', type=bool, default=False)
+parser.add_argument('--n_pred', type=int, default=3)
+parser.add_argument('--depth', type=int, default=5)
+# parser.add_argument('--ipmethod', type=int, default=0)
+parser.add_argument('--save_image', type=int, default=None)
 parser.add_argument('--image_dir', type=str, default='view/')
 args = parser.parse_args()
 
@@ -67,6 +68,7 @@ def main():
     Framework.net_args['rep'] = args.rep
     if 'n_pred' in model_args.keys():
         Framework.net_args['n_pred'] = model_args['n_pred']
+        Framework.net_args['depth'] = model_args['depth']
         Framework.net_args['ipmethod'] = model_args['ipmethod']
     Framework.net_args.update(eval('dict({})'.format(model_args['net_args'])))
     if args.net_args is not None:
@@ -87,6 +89,19 @@ def main():
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     sess = tf.Session(config=config)
+    affcnt = 0
+    defcnt = 0
+    for v in tf.trainable_variables():
+        print(v)
+        if 'affine' in v.name:
+            affcnt += np.prod(v.get_shape().as_list())
+        elif 'deform' in v.name:
+            l = v.get_shape().as_list()
+            for i in range(3, len(l)):
+                l[i] = min(l[i], 32)
+            defcnt += np.prod(l)
+
+    print("-------\n trainable varibales: affine %d, deform %d\n----------\n" %(affcnt, defcnt))
 
     saver = tf.train.Saver(tf.get_collection(
         tf.GraphKeys.GLOBAL_VARIABLES))
@@ -101,7 +116,7 @@ def main():
     tflearn.is_training(False, session=sess)
     keys = ['pt_mask', 'landmark_dists', 'jaccs', 'dices', 'jacobian_det'] 
     if args.save_image:
-        keys = keys+['real_flow', 'warped_moving', 'warped_seg_moving']
+        keys = keys+['real_flow', 'warped_moving', 'warped_seg_moving', 'flow_1', 'flow_inc_1']
     if not os.path.exists('evaluate'):
         os.mkdir('evaluate')
     path_prefix = os.path.join('evaluate', short_name(checkpoint))
@@ -117,27 +132,34 @@ def main():
         with open(output_fname, 'w') as fo:
             print("Validation subset {}".format(val_subset))
             gen = ds.generator(val_subset, loop=False)
-            results = framework.validate(sess, gen, keys=keys, summary=False, predict=args.save_image)
-            for i in range(len(results['jaccs'])):
-                print(results['id1'][i], results['id2'][i], np.mean(results['dices'][i]), np.mean(results['jaccs'][i]), np.mean(
-                    results['landmark_dists'][i]), results['jacobian_det'][i], file=fo)
-            print('Summary', file=fo)
-            times, jaccs, dices, landmarks = results['time'], results['jaccs'], results['dices'], results['landmark_dists']
-            jacobian_det = results['jacobian_det']
-            print("Inference time: {} ({})".format(np.mean(times), np.std(
-                np.mean(times, axis=-1))), file=fo)
-            print("Dice score: {} ({})".format(np.mean(dices), np.std(
-                np.mean(dices, axis=-1))), file=fo)
-            print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(
-                np.mean(jaccs, axis=-1))), file=fo)
-            print("Landmark distance: {} ({})".format(np.mean(landmarks), np.std(
-                np.mean(landmarks, axis=-1))), file=fo)
-            print("Jacobian determinant: {} ({})".format(np.mean(
-                jacobian_det), np.std(jacobian_det)), file=fo)
-            if args.save_image:
-                for k in ['seg1', 'seg2', 'img1', 'img2', 'real_flow', 'warped_moving', 'warped_seg_moving']:
-                    print('saving {}'.format(k))
-                    np.savez(os.path.join(args.image_dir, k), data=results[k])
+            results = framework.validate(sess, gen, keys=keys, summary=False, predict=args.save_image, cnt=10000 if args.save_image is None else args.save_image)
+
+            if args.save_image is not None:
+                img_path = os.path.join(args.image_dir, short_name(checkpoint))
+                if not os.path.exists(img_path):
+                    os.mkdir(img_path)
+                for k in ['seg1', 'seg2', 'img1', 'img2', 'real_flow', 'warped_moving', 'warped_seg_moving', 'flow_1', 'flow_inc_1']:
+                    if k in results.keys():
+                        print('saving {}'.format(k))
+                        np.savez(os.path.join(img_path, k), data=results[k])
+            else:
+                for i in range(len(results['jaccs'])):
+                    print(results['id1'][i], results['id2'][i], np.mean(results['dices'][i]), np.mean(results['jaccs'][i]), np.mean(
+                        results['landmark_dists'][i]), results['jacobian_det'][i], file=fo)
+                print('Summary', file=fo)
+                times, jaccs, dices, landmarks = results['time'], results['jaccs'], results['dices'], results['landmark_dists']
+                jacobian_det = results['jacobian_det']
+                print("Dice score: {} ({})".format(np.mean(dices), np.std(
+                    np.mean(dices, axis=-1))), file=fo)
+                print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(
+                    np.mean(jaccs, axis=-1))), file=fo)
+                print("Landmark distance: {} ({})".format(np.mean(landmarks), np.std(
+                    np.mean(landmarks, axis=-1))), file=fo)
+                print("Jacobian determinant: {} ({})".format(np.mean(
+                    jacobian_det), np.std(jacobian_det)), file=fo)
+                print("Inference time: {} ({}), min: {}, max: {}".format(np.mean(times[1:]), np.std(
+                    times[1:]), np.min(times), np.max(times)), file=fo)
+                print(times, file=fo)
 
 
 def short_name(checkpoint):

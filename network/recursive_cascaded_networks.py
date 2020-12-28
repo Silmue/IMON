@@ -168,7 +168,6 @@ class RecursiveCascadedNetworks(Network):
             fixed_segs = []
             warped_segs = []
             for k, v in self.framework.segmentation_class_value.items():
-                #print('Segmentation {}, {}'.format(k, v))
                 fixed_seg_class = mask_class(seg1, v)
                 warped_seg_class = self.reconstruction(
                     [mask_class(seg2, v), flow])
@@ -211,8 +210,8 @@ class RecursiveCascadedNetworks(Network):
             ret['warped_moving_%d' % i] = r['warped']
             ret['flow_%d' % i] = r['flow']
             ret['real_flow_%d' % i] = r['agg_flow']
-            if 'flow_inc' in r.keys():
-                ret['flow_inc_%d' % i] = r['flow_inc']
+            if 'pred_inc' in r.keys():
+                ret['flow_inc_%d' % i] = r['pred_inc']
 
         return ret
 

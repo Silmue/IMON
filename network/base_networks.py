@@ -283,6 +283,9 @@ class Siamese(Network):
         # print('-------------------\n pred shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred]))
         # print('-------------------\n predinc shape:{}\n----------------------\n'.format([x.shape.as_list() for x in pred_inc]))
 
+        for i in range(1, len(pred_inc)):
+            pred_inc[-i-1] = UpSampling3D(1<<(i-1))(pred_inc[-i-1])
+        pred_inc = tf.stack(pred_inc, axis=1)
         return {'flow': pred[-1] * self.flow_multiplier,
                 'pred_inc': pred_inc}
 

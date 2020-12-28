@@ -189,7 +189,9 @@ class MultiGPUs:
         with tf.device('/gpu:0'):
             concat_result = {}
             for k in results[0]:
-                if len(results[0][k].shape) == 0:
+                if type(results[0][k]) is list:
+                    concat_result[k] = [result[k] for result in results]
+                elif len(results[0][k].shape) == 0:
                     concat_result[k] = tf.stack(
                         [result[k] for result in results])
                 else:
