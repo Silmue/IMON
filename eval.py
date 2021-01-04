@@ -25,6 +25,8 @@ parser.add_argument('--depth', type=int, default=5)
 # parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--save_image', type=int, default=None)
 parser.add_argument('--image_dir', type=str, default='view/')
+parser.add_argument('--save_feature', type=int, default=None)
+parser.add_argument('--discriminator', type=str, default=None)
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -79,7 +81,7 @@ def main():
         image_type = cfg.get('image_type')
     gpus = 0 if args.gpu == '-1' else len(args.gpu.split(','))
     framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get(
-        'segmentation_class_value', None), fast_reconstruction=args.fast_reconstruction, validation=True)
+        'segmentation_class_value', None), fast_reconstruction=args.fast_reconstruction, validation=True, discriminator=args.discriminator)
     print('Graph built')
 
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
@@ -116,7 +118,9 @@ def main():
     tflearn.is_training(False, session=sess)
     keys = ['pt_mask', 'landmark_dists', 'jaccs', 'dices', 'jacobian_det'] 
     if args.save_image:
-        keys = keys+['real_flow', 'warped_moving', 'warped_seg_moving', 'flow_1', 'flow_inc_1']
+        # img_keys = ['real_flow', 'warped_moving', 'warped_seg_moving', 'flow_1', 'flow_inc_1']
+        img_keys = ['real_flow', 'warped_moving', 'warped_seg_moving']
+        keys = keys + img_keys 
     if not os.path.exists('evaluate'):
         os.mkdir('evaluate')
     path_prefix = os.path.join('evaluate', short_name(checkpoint))
@@ -129,6 +133,18 @@ def main():
             output_fname = path_prefix + '-' + str(val_subset) + '.txt'
         else:
             output_fname = path_prefix + '.txt'
+        if args.save_feature is not None:
+            print("Validation subset {}".format(val_subset))
+            gen = ds.generator(val_subset, loop=False)
+            results = framework.validate(sess, gen, keys=['feat1', 'feat2', 'warped_moving'], summary=False, predict=True, cnt=args.save_feature)
+            img_path = os.path.join(args.image_dir, short_name(checkpoint))
+            if not os.path.exists(img_path):
+                os.mkdir(img_path)
+            for k in ['img1', 'warped_moving', 'feat1', 'feat2']:
+                if k in results.keys():
+                    print('saving {}'.format(k))
+                    np.savez(os.path.join(img_path, k), data=results[k])
+            continue
         with open(output_fname, 'w') as fo:
             print("Validation subset {}".format(val_subset))
             gen = ds.generator(val_subset, loop=False)
@@ -160,6 +176,11 @@ def main():
                 print("Inference time: {} ({}), min: {}, max: {}".format(np.mean(times[1:]), np.std(
                     times[1:]), np.min(times), np.max(times)), file=fo)
                 print(times, file=fo)
+
+                img_path = os.path.join(args.image_dir, short_name(checkpoint))
+                if not os.path.exists(img_path):
+                    os.mkdir(img_path)
+                np.savez(os.path.join(args.image_dir, short_name(checkpoint), 'dice'), data=dices)
 
 
 def short_name(checkpoint):

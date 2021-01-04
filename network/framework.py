@@ -105,7 +105,7 @@ class FrameworkUnsupervised:
         else:
             gpus = MultiGPUs(devices)
             if validation:
-                self.predictions = gpus(self.network, net_pls)
+                self.predictions = gpus(self.network, net_pls, D=self.discriminator)
             else:
                 self.predictions, self.O, self.G, self.V = gpus(
                 self.network, net_pls, self.discriminator, opt=adamOptimizer, popt=posOptimizer, nopt=negOptimizer)

@@ -45,9 +45,9 @@ parser.add_argument('--logs', type=str, default='')
 parser.add_argument('--n_pred', type=int, default=3)
 parser.add_argument('--ipmethod', type=int, default=0)
 parser.add_argument('--depth', type=int, default=5)
-parser.add_argument('--discriminator', type=str, default='')
+parser.add_argument('--discriminator', type=str, default=None)
 parser.add_argument('--pre_step', type=int, default=10000)
-parser.add_argument('--D_step', type=int, default=None)
+parser.add_argument('--D_step', type=int, default=0)
 parser.add_argument('--loss', type=str, default='NCC')
 parser.add_argument('--nccwin', type=int, default=9)
 parser.add_argument('--loadmode', type=int, default=1)
@@ -281,7 +281,7 @@ def main():
 
             Dloss = -1
             for v in tf.Summary().FromString(summ).value:
-                if args.discriminator is None or steps<args.D_step and v.tag == 'loss':
+                if (args.discriminator is None or steps<args.D_step) and v.tag == 'loss':
                     loss = v.simple_value
                 if args.discriminator and steps>=args.D_step and v.tag == 'RD_loss':
                     loss = v.simple_value

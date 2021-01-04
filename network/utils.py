@@ -169,6 +169,10 @@ class MultiGPUs:
                     result['D_reg_loss'] = D.l2_regularizer
                     
                     result['D_loss'] = result['Triplet_loss'] + result['D_reg_loss']
+
+                    if hasattr(D, "feature"):
+                        result['feat1'] = neg_result['feat2']
+                        result['feat2'] = neg_result['feat1']
                     # result['Pair_loss'] = result['D_loss_pos']/(-result['D_loss_neg'])
 
             

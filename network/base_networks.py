@@ -608,14 +608,18 @@ class PartDiscriminator(Network):
             return {
                 'prob' : tf.reduce_sum(cc),
                 'positive': tf.reduce_sum(1-cc),
-                'negative': tf.reduce_sum(cc)
+                'negative': tf.reduce_sum(cc),
+                'feat1': f1,
+                'feat2': f2
             }
         else:
             l2 = tf.nn.l2_loss(f1-f2)/(128**3)
             return {
                 'prob' : l2,
                 'positive': l2,
-                'negative': -l2
+                'negative': -l2,
+                'feat1': f1,
+                'feat2': f2
             }
 
 
