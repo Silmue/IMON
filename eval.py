@@ -97,7 +97,7 @@ def main():
         print(v)
         if 'affine' in v.name:
             affcnt += np.prod(v.get_shape().as_list())
-        elif 'deform' in v.name:
+        elif 'deform' in v.name and 'feat' not in v.name:
             l = v.get_shape().as_list()
             for i in range(3, len(l)):
                 l[i] = min(l[i], 32)

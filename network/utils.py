@@ -154,6 +154,9 @@ class MultiGPUs:
                 self.current_device = i
                 net.controller = self
                 result = net(*[arg[i] for arg in args])
+                var = tf.global_variables()
+                Rvar = [val for val in var if 'feat' not in val.name and 'frm' in val.name]
+                Dvar = [val for val in var if 'feat' in val.name or 'frm' not in val.name]
                 if D is not None:
                     # D_portion = tf.placeholder(tf.float32, [], 'D_portion')
                     margin = 10
@@ -166,7 +169,7 @@ class MultiGPUs:
                     result['D_loss_neg'] = neg_result['negative']
 
                     result['Triplet_loss'] = tf.math.maximum(result['D_loss_pos']+result['D_loss_neg'], -margin)
-                    result['D_reg_loss'] = D.l2_regularizer
+                    result['D_reg_loss'] = D.l2_regularizer if hasattr(D, l2_regularizer) else net[-1][0].l2_regularizer
                     
                     result['D_loss'] = result['Triplet_loss'] + result['D_reg_loss']
 
@@ -180,15 +183,15 @@ class MultiGPUs:
                 if opt is not None:
                     if D is not None:
                         dgrads.append(opt.compute_gradients(
-                            result['RD_loss'], var_list=net.trainable_variables))
+                            result['RD_loss'], var_list=Rvar))
                         # posgrads.append(popt.compute_gradients(
                         #     result['D_loss_pos'], var_list=D.trainable_variables))
                         # neggrads.append(nopt.compute_gradients(
                         #     result['D_loss_neg'], var_list=D.trainable_variables))
                         pairgrads.append(popt.compute_gradients(
-                            result['D_loss'], var_list=D.trainable_variables))
+                            result['D_loss'], var_list=Dvar))
                     grads.append(opt.compute_gradients(
-                        result['loss'], var_list=net.trainable_variables))
+                        result['loss'], var_list=Rvar))
 
         with tf.device('/gpu:0'):
             concat_result = {}

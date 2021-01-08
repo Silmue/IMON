@@ -30,10 +30,6 @@ class FrameworkUnsupervised:
 
         self.reconstruction = Fast3DTransformer() if fast_reconstruction else Dense3DSpatialTransformer()
 
-        if discriminator:
-            self.discriminator = eval(discriminator)(name=discriminator)
-        else:
-            self.discriminator = None
         # input place holder
         img1 = tf.placeholder(dtype=tf.float32, shape=[
                               None, 128, 128, 128, 1], name='voxel1')
@@ -96,6 +92,26 @@ class FrameworkUnsupervised:
         self.network = network_class(
             self.framework_name, framework=self, fast_reconstruction=fast_reconstruction, **self.net_args)
         net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2]
+
+        def CoupleDiscriminator(name, network=self.network):
+            def d(img1, img2):
+                net = network[-1][0]
+                f1, f2 = net(img1, img2)['feature']
+                l2 = tf.nn.l2_loss(f1-f2)/(128**3)
+                return {
+                    'prob' : l2,
+                    'positive': l2,
+                    'negative': -l2,
+                    'feat1': f1,
+                    'feat2': f2
+                }
+            return d
+
+        if discriminator:
+            self.discriminator = eval(discriminator)(name=discriminator)
+        else:
+            self.discriminator = None
+
         if devices == 0:
             with tf.device("/cpu:0"):
                 self.predictions = self.network(*net_pls)

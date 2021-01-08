@@ -120,8 +120,10 @@ def main():
             tf.global_variables_initializer().run()
             checkpoints = args.checkpoint.split(';')
             var = tf.global_variables()
-            Rvar = [val for val in var if 'frm' in val.name]
-            Dvar = [val for val in var if 'frm' not in val.name]
+            # Rvar = [val for val in var if 'frm' in val.name]
+            # Dvar = [val for val in var if 'frm' not in val.name]
+            Rvar = [val for val in var if 'feat' not in val.name and 'frm' in val.name]
+            Dvar = [val for val in var if 'feat' in val.name or 'frm' not in val.name]
             varlist = Rvar if args.loadmode==1 else (Dvar if args.loadmode==2 else var)
             if args.clear_steps:
                 steps = 0
@@ -130,6 +132,19 @@ def main():
             for cp in checkpoints:
                 saver = tf.train.Saver(varlist)
                 saver.restore(sess, cp)
+
+        affcnt = 0
+        defcnt = 0
+        for v in tf.trainable_variables():
+            print(v)
+            if 'affine' in v.name:
+                affcnt += np.prod(v.get_shape().as_list())
+            elif 'deform' in v.name and 'feat' not in v.name:
+                defcnt += np.prod(v.get_shape().as_list())
+
+        print("-------\n trainable varibales: affine %d, deform %d\n----------\n" %(affcnt, defcnt))
+
+
 
         data_args = eval('dict({})'.format(args.data_args))
         data_args.update(framework.data_args)
