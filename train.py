@@ -208,7 +208,7 @@ def main():
 
         def get_lr(steps):
             m = args.lr / learningRates[0]
-            return m * learningRates[min(steps // iterationSize, len(learningRates)-1)]
+            return m * learningRates[min(steps // (4*iterationSize), len(learningRates)-1)]
 
         last_save_stamp = time.time()
 

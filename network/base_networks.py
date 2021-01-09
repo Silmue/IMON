@@ -6,7 +6,8 @@ from tflearn.initializations import normal
 from .spatial_transformer import Dense3DSpatialTransformer, Fast3DTransformer
 from .utils import Network, ReLU, LeakyReLU
 
-defautl_channel = 8
+DEFAULT_CHANNEL = 8
+MAX_CHANNEL = 8
 
 
 def convolve(opName, inputLayer, outputChannel, kernelSize, stride, stddev=1e-2, reuse=False, weights_init='uniform_scaling', regularizer=None):
@@ -82,12 +83,13 @@ def encoderBlock(opName, inputLayer, outputChannel, kernelSize, stride, alpha=0.
         residual = convolve(opName+"_1X1", residual, outputChannel, 1, stride)
     return LeakyReLU(tf.add(x, residual), alpha, opName+'_leakilyrectified')
 
-class SiameseLower(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, depth=5, n_pred=3, **kwargs):
+class SiameseLow(Network):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
-        self.encoders = [m * channels for m in ([1] + [2]*depth)]
+        # self.encoders = [m * channels for m in ([1] + [2, 2]+ [4]*(depth-2))]
+        self.encoders = [m * channels for m in [min(MAX_CHANNEL, (1<<i)) for i in range(depth+1)]]
         # self.decoders = [m * channels for m in [2, 2, 2, 2, 2, 1, 1]] + [3]
         self.depth = depth
         self.n_pred = n_pred
@@ -105,25 +107,26 @@ class SiameseLower(Network):
         dims = 3
         ec = self.encoders
         
-        def encoder(img):
-            convs = [convolveLeakyReLU('conv0', imgm, ec[0], 3, 1, reuse=tf.AUTO_REUSE)]
+        def encoder(_img, reuse=False):
+            convs = [convolveLeakyReLU('conv0', _img, ec[0], 3, 1, reuse=reuse)]
             shapes = [convs[-1].shape.as_list()]
             for i in range(1, self.depth+1):
                 convs.append(convolveLeakyReLU(
-                    'conv{}'.format(i), convs[-1], ec[i], 3, 2, reuse=tf.AUTO_REUSE))
+                    'conv{}'.format(i), convs[-1], ec[i], 3, 2, reuse=reuse))
                 shapes.append(convs[-1].shape.as_list())
-            feats = []
-            for i in range(self.depth, 0, -1):
-                _concat = tf.concat([feats[-1], convs[i]], axis=4) if len(feats) else convs[i]
-                _upsample = UpSampling3D()(_concat)
-                feats.append(convolveLeakyReLU(
-                    'feat{}'.format(i), _upsample, ec[i], 3, 1, reuse=tf.AUTO_REUSE))
-            feat = convolveLeakyReLU(
-                    'feat_out', feats[-1], ec[i], 3, 1, reuse=tf.AUTO_REUSE)
+            feat = None  
+            # feats = []
+            # for i in range(self.depth, 0, -1):
+            #     _concat = tf.concat([feats[-1], convs[i]], axis=4) if len(feats) else convs[i]
+            #     _upsample = UpSampling3D()(_concat)
+            #     feats.append(convolveLeakyReLU(
+            #         'feat{}'.format(i), _upsample, ec[i], 3, 1, reuse=tf.AUTO_REUSE))
+            # feat = convolveLeakyReLU(
+            #         'feat_out', feats[-1], ec[i], 3, 1, reuse=tf.AUTO_REUSE)
             return convs, shapes, feat
 
         convf, shapes, featf = encoder(imgf)
-        convm, shapes, featm = encoder(imgm)
+        convm, _, featm = encoder(imgm, reuse=True)
         print('-------------------\n conv shape:{}\n----------------------\n'.format(shapes))
 
         concat = [tf.concat([convf[-1], convm[-1]], 4,
@@ -133,98 +136,17 @@ class SiameseLower(Network):
         iconv = []
         pred = []
         pred_inc = []
-        deconv = []
-        
-
-        for i in range(self.depth, 0, -1):
-            deconv.append(UpSampling3D()(concat[-1]))
-            iconv.append(convolveLeakyReLU('iconv{}'.format(i),
-                                           deconv[-1], shapes[i-1][-1], 3, 1))
-                                           
-            if i < self.n_pred:
-                pred_inc.append(convolveLeakyReLU(
-                    'pred_inc{}'.format(i), iconv[-1], 3, 3, 1)*(1 << i))
-                pred.append(pred_inc[-1]+self.reconstruction([UpSampling3D()(pred[-1]*2),
-                                                              pred_inc[-1]]) if len(pred) else pred_inc[-1])
-                concat.append(tf.concat([iconv[-1], self.reconstruction(
-                    [convm[i-1], pred[-1]]), convf[i-1]], 4, 'concat{}'.format(i-1)))
-            else:
-                concat.append(
-                    tf.concat([iconv[-1], convm[i-1], convf[i-1]], 4, 'concat{}'.format(i-1)))
-        iconv.append(convolveLeakyReLU(
-            'iconv0', concat[-1], shapes[0][-1], 3, 1))
-        pred_inc.append(convolveLeakyReLU('pred_inc0', iconv[-1], 3, 3, 1))
-        pred[-1] = pred_inc[-1]+self.reconstruction([pred[-1], pred_inc[-1]])
-        
-
-        return {'flow': pred[-1] * self.flow_multiplier,
-                'pred_inc': pred_inc,
-                'feature': [featf, featm]}
-
-
-class SiameseLow(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, depth=5, n_pred=3, **kwargs):
-        super().__init__(name, **kwargs)
-        self.flow_multiplier = flow_multiplier
-        self.channels = channels
-        self.encoders = [m * channels for m in ([1] + [2]*depth)]
-        # self.decoders = [m * channels for m in [2, 2, 2, 2, 2, 1, 1]] + [3]
-        self.depth = depth
-        self.n_pred = n_pred
-        self.reconstruction = Dense3DSpatialTransformer()
-
-    @property
-    def l2_regularizer(self, decay=0.5):
-        return decay * tf.add_n([tf.nn.l2_loss(tf.cast(v, tf.float32)) for v in self.trainable_variables if ('b:0' not in v.name and 'feat' in v.name)])
-
-    def build(self, imgf, imgm):
-        '''
-            img1, img2, flow : tensor of shape [batch, X, Y, Z, C]
-        '''
-
-        dims = 3
-        ec = self.encoders
-        
-        def encoder(img):
-            convs = [convolveLeakyReLU('conv0', imgm, ec[0], 3, 1, reuse=tf.AUTO_REUSE)]
-            shapes = [convs[-1].shape.as_list()]
-            for i in range(1, self.depth+1):
-                convs.append(convolveLeakyReLU(
-                    'conv{}'.format(i), convs[-1], ec[i], 3, 2, reuse=tf.AUTO_REUSE))
-                if i>3:
-                    convs[-1] = convolveLeakyReLU(
-                        'conv{}_1'.format(i), convs[-1], ec[i], 3, 1, reuse=tf.AUTO_REUSE)
-                shapes.append(convs[-1].shape.as_list())
-            feats = []
-            for i in range(self.depth, 0, -1):
-                _concat = tf.concat([feats[-1], convs[i]], axis=4) if len(feats) else convs[i]
-                _upsample = UpSampling3D()(_concat)
-                feats.append(convolveLeakyReLU(
-                    'feat{}'.format(i), _upsample, ec[i], 3, 1, reuse=tf.AUTO_REUSE))
-            feat = convolveLeakyReLU(
-                    'feat_out', feats[-1], ec[i], 3, 1, reuse=tf.AUTO_REUSE)
-            return convs, shapes, feat
-
-        convf, shapes, featf = encoder(imgf)
-        convm, shapes, featm = encoder(imgm)
-        print('-------------------\n conv shape:{}\n----------------------\n'.format(shapes))
-
-        concat = [tf.concat([convf[-1], convm[-1]], 4,
-                            'concat{}'.format(self.depth))]
-        
-        iconv = []
-        pred = []
-        pred_inc = []
-        deconv = []
         
 
         for i in range(self.depth, 0, -1):
             iconv.append(convolveLeakyReLU('iconv{}'.format(i),
                                            concat[-1], shapes[i][-1], 3, 1))
-            deconv.append(UpSampling3D()(iconv[-1]))
-            iconv.append(convolveLeakyReLU('iconv{}_1'.format(i),
-                                           deconv[-1], shapes[i-1][-1], 3, 1))
-                                           
+            # iconv.append(UpSampling3D()(iconv[-1]))
+            # iconv.append(convolveLeakyReLU('iconv{}_1'.format(i),
+            #                                iconv[-1], shapes[i-1][-1], 3, 1))
+            iconv.append(upconvolveLeakyReLU('deconv{}'.format(
+                i-1), iconv[-1], shapes[i-1][-1], 4, 2, shapes[i-1][1:-1]))
+
             if i < self.n_pred:
                 pred_inc.append(convolveLeakyReLU(
                     'pred_inc{}'.format(i), iconv[-1], 3, 3, 1)*(1 << i))
@@ -237,18 +159,22 @@ class SiameseLow(Network):
                     tf.concat([iconv[-1], convm[i-1], convf[i-1]], 4, 'concat{}'.format(i-1)))
         iconv.append(convolveLeakyReLU(
             'iconv0', concat[-1], shapes[0][-1], 3, 1))
-        iconv.append(convolveLeakyReLU(
-            'iconv0_1', iconv[-1], shapes[0][-1], 3, 1))
         pred_inc.append(convolveLeakyReLU('pred_inc0', iconv[-1], 3, 3, 1))
         pred[-1] = pred_inc[-1]+self.reconstruction([pred[-1], pred_inc[-1]])
         
 
+        for i in range(1, len(pred_inc)):
+            pred_inc[-i-1] = UpSampling3D(1<<(i-1))(pred_inc[-i-1])
+        pred_inc = tf.stack(pred_inc, axis=1)
+        
         return {'flow': pred[-1] * self.flow_multiplier,
                 'pred_inc': pred_inc,
                 'feature': [featf, featm]}
 
+
+
 class SiameseLink(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, ipmethod=0, depth=5, n_pred=3, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, ipmethod=0, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -306,7 +232,7 @@ class SiameseLink(Network):
 
 
 class Siamese2conv(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, depth=5, n_pred=3, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -377,7 +303,7 @@ class Siamese2conv(Network):
 
 
 class Siamese(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, depth=5, n_pred=3, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, depth=5, n_pred=3, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -447,7 +373,7 @@ class Siamese(Network):
 
 
 class VTN(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.channels = channels
@@ -523,7 +449,7 @@ class VTN(Network):
 
 
 class VoxelMorph(Network):
-    def __init__(self, name, flow_multiplier=1., channels=defautl_channel, **kwargs):
+    def __init__(self, name, flow_multiplier=1., channels=DEFAULT_CHANNEL, **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
         self.encoders = [m * channels for m in [1, 2, 2, 2]]
